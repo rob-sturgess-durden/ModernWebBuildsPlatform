@@ -1,0 +1,49 @@
+# WordPress files - ignore entire wordpress directory
+wordpress/
+wordpress/*
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Node modules
+node_modules/
+frontend/dist/
+
+# SQLite database
+backend/data/*.db
+
+# PEM files
+*.pem

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hackney Restaurant Homepages - Generated Mockups</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+        
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .restaurants-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+        
+        .restaurant-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+            text-align: center;
+        }
+        
+        .restaurant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .restaurant-card h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+        
+        .restaurant-card p {
+            color: #666;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+        
+        .view-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .view-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .footer p {
+            opacity: 0.8;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .restaurants-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🍽️ Hackney Restaurant Homepages</h1>
+            <p>Beautiful, responsive mockup homepages generated from CSV data. Each homepage features modern design, social media integration, and restaurant-specific content.</p>
+        </header>
+        
+        <div class="restaurants-grid">
+            <div class="restaurant-card">
+                <h3>Beans & Bites</h3>
+                <p>Halal-friendly brunch café serving Mediterranean-inspired dishes like shakshuka. Located at 244 Morning Lane, London E9 6RQ.</p>
+                <a href="beans__bites.html" class="view-button" target="_blank">View Homepage</a>
+            </div>
+            
+            <div class="restaurant-card">
+                <h3>The Full English</h3>
+                <p>Traditional English café specializing in full breakfast and brunch. Located at 96 Lower Clapton Road, London E5 0QR.</p>
+                <a href="the_full_english.html" class="view-button" target="_blank">View Homepage</a>
+            </div>
+            
+            <div class="restaurant-card">
+                <h3>Sons (coffee kiosk)</h3>
+                <p>Specialty coffee kiosk serving quality coffee, pastries, and toasties. Located at St John at Hackney Courtyard, Lower Clapton Rd, London E5 0PD.</p>
+                <a href="sons_coffee_kiosk.html" class="view-button" target="_blank">View Homepage</a>
+            </div>
+            
+            <div class="restaurant-card">
+                <h3>Mess Cafe</h3>
+                <p>Classic British "greasy spoon" café popular for all-day breakfast & brunch. Located at 38 Amhurst Road, Hackney, London E8 1JN.</p>
+                <a href="mess_cafe.html" class="view-button" target="_blank">View Homepage</a>
+            </div>
+            
+            <div class="restaurant-card">
+                <h3>People's Choice Caribbean</h3>
+                <p>Caribbean takeaway renowned locally for jerk chicken, patties, and more. Located at 51B Chatsworth Road, Lower Clapton, London E5 0LH.</p>
+                <a href="peoples_choice_caribbean.html" class="view-button" target="_blank">View Homepage</a>
+            </div>
+            
+            <div class="restaurant-card">
+                <h3>Rainbow Cookout</h3>
+                <p>Jamaican street-food stall specializing in charcoal-grilled jerk specialties. Located at 354 Mare Street, Hackney, London E8 1HR.</p>
+                <a href="rainbow_cookout.html" class="view-button" target="_blank">View Homepage</a>
+            </div>
+        </div>
+        
+        <footer class="footer">
+            <p>Generated with ❤️ using Python and modern web technologies</p>
+            <p>All homepages are responsive and feature beautiful, professional design</p>
+        </footer>
+    </div>
+</body>
+</html> 
