@@ -33,7 +33,7 @@ export default function OrderStatusPage() {
 
   return (
     <div className="container section">
-      <div className="card" style={{ maxWidth: 600, margin: "0 auto" }}>
+      <div className="contact-card" style={{ maxWidth: 600, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
           <div style={{ fontSize: "2.5rem", marginBottom: "0.5rem" }}>
             {order.status === "collected" ? "\u2705" : order.status === "cancelled" ? "\u274C" : "\uD83D\uDCE6"}
@@ -92,7 +92,7 @@ export default function OrderStatusPage() {
         </p>
 
         <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
-          <Link to="/restaurants" className="btn btn-outline">
+          <Link to="/restaurants" className="btn btn-secondary">
             Back to Restaurants
           </Link>
         </div>

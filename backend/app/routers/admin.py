@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, BackgroundTasks
 from ..database import get_db
 from ..models import (
@@ -36,7 +37,7 @@ def admin_login(body: AdminLogin):
 # --- Orders ---
 
 @router.get("/orders", response_model=list[OrderResponse])
-def list_orders(status: str | None = None, authorization: str = Header(...)):
+def list_orders(status: Optional[str] = None, authorization: str = Header(...)):
     restaurant = _get_restaurant_from_token(authorization)
     with get_db() as db:
         if status:

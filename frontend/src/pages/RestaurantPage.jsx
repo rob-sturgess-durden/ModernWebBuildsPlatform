@@ -11,7 +11,7 @@ import CheckoutForm from "../components/order/CheckoutForm";
 export default function RestaurantPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { addItem, basket } = useBasket();
+  const { addItem } = useBasket();
 
   const [restaurant, setRestaurant] = useState(null);
   const [menu, setMenu] = useState([]);
@@ -25,12 +25,9 @@ export default function RestaurantPage() {
       .then(([r, m]) => {
         setRestaurant(r);
         setMenu(m);
-        document.documentElement.setAttribute("data-theme", r.theme || "modern");
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-
-    return () => document.documentElement.removeAttribute("data-theme");
   }, [slug]);
 
   if (loading) return <div className="loading">Loading...</div>;
@@ -47,12 +44,14 @@ export default function RestaurantPage() {
 
   if (checkout) {
     return (
-      <div className="container section">
-        <CheckoutForm
-          onSuccess={handleOrderSuccess}
-          onCancel={() => setCheckout(false)}
-        />
-      </div>
+      <section className="section" style={{ padding: "72px 6vw" }}>
+        <div className="container">
+          <CheckoutForm
+            onSuccess={handleOrderSuccess}
+            onCancel={() => setCheckout(false)}
+          />
+        </div>
+      </section>
     );
   }
 
@@ -60,37 +59,44 @@ export default function RestaurantPage() {
     <div>
       <RestaurantHero restaurant={restaurant} />
 
-      <div className="container section">
-        <div className="restaurant-layout">
-          <div>
-            <h2 className="section-title" style={{ textAlign: "left" }}>Menu</h2>
-            {menu.length === 0 ? (
-              <p style={{ color: "var(--text-light)" }}>No menu items available yet.</p>
-            ) : (
-              menu.map((cat) => (
-                <MenuSection key={cat.id} category={cat} onAddItem={handleAddItem} />
-              ))
-            )}
-          </div>
+      <section id="menu" className="menu" style={{ padding: "72px 6vw" }}>
+        <div className="container">
+          <div className="restaurant-layout">
+            <div>
+              <div className="section-title" style={{ marginBottom: 32, textAlign: "left" }}>
+                <p className="eyebrow">Menu</p>
+                <h2 style={{ fontFamily: '"Fraunces", serif', margin: "12px 0 0" }}>
+                  Order ahead
+                </h2>
+              </div>
+              {menu.length === 0 ? (
+                <p style={{ color: "var(--text-light)" }}>No menu items available yet.</p>
+              ) : (
+                menu.map((cat) => (
+                  <MenuSection key={cat.id} category={cat} onAddItem={handleAddItem} />
+                ))
+              )}
+            </div>
 
-          <div>
-            <Basket onCheckout={() => setCheckout(true)} />
+            <div>
+              <Basket onCheckout={() => setCheckout(true)} />
 
-            <div style={{ marginTop: "2rem" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Find Us</h3>
-              <MapWidget
-                lat={restaurant.latitude}
-                lng={restaurant.longitude}
-                name={restaurant.name}
-                address={restaurant.address}
-              />
-              <p style={{ marginTop: "0.8rem", color: "var(--text-light)", fontSize: "0.9rem" }}>
-                {restaurant.address}
-              </p>
+              <div className="contact-card" style={{ marginTop: "2rem" }}>
+                <p className="meta-title">Find us</p>
+                <MapWidget
+                  lat={restaurant.latitude}
+                  lng={restaurant.longitude}
+                  name={restaurant.name}
+                  address={restaurant.address}
+                />
+                <p style={{ marginTop: "0.8rem", color: "var(--text-light)", fontSize: "0.9rem" }}>
+                  {restaurant.address}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

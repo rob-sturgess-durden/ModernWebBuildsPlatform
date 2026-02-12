@@ -1,43 +1,39 @@
-const HERO_IMAGES = {
-  coffee: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=1200&q=80",
-  caribbean: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80",
-  jamaican: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200&q=80",
-  english: "https://images.unsplash.com/photo-1533920379810-6bedac961a46?w=1200&q=80",
-  breakfast: "https://images.unsplash.com/photo-1533920379810-6bedac961a46?w=1200&q=80",
-  default: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&q=80",
-};
-
 export default function RestaurantHero({ restaurant }) {
-  const bg = getHeroImage(restaurant.cuisine_type);
+  const cuisineShort = restaurant.cuisine_type.split("(")[0].trim();
 
   return (
-    <section
-      style={{
-        background: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.6)), url('${bg}')`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        padding: "6rem 1.5rem 4rem",
-        textAlign: "center",
-        color: "#fff",
-      }}
-    >
-      <h1 style={{ fontSize: "2.8rem", fontWeight: 700, marginBottom: "0.8rem", textShadow: "2px 2px 4px rgba(0,0,0,0.5)" }}>
-        {restaurant.name}
-      </h1>
-      <p style={{ fontSize: "1.1rem", maxWidth: 600, margin: "0 auto 1rem", opacity: 0.9 }}>
-        {restaurant.cuisine_type}
-      </p>
-      <p style={{ fontSize: "0.95rem", opacity: 0.8 }}>
-        {restaurant.address}
-      </p>
-    </section>
+    <header className="hero">
+      <div className="container">
+        <div className="hero-content">
+          <div className="hero-text">
+            <p className="eyebrow">{cuisineShort}</p>
+            <h1 style={{ fontFamily: '"Fraunces", serif', fontSize: "clamp(32px, 4vw, 48px)", margin: "12px 0 16px" }}>
+              {restaurant.name}
+            </h1>
+            <p className="lede">{restaurant.cuisine_type}</p>
+            <div className="hero-meta">
+              <div>
+                <p className="meta-title">Find us</p>
+                <p>{restaurant.address}</p>
+              </div>
+            </div>
+          </div>
+          <div className="hero-card">
+            <div className="card-header">
+              <p className="eyebrow">Ready to order?</p>
+              <h3 style={{ fontFamily: '"Fraunces", serif', margin: "8px 0 12px" }}>
+                Click &amp; collect
+              </h3>
+            </div>
+            <p style={{ color: "var(--text-light)", lineHeight: 1.5, marginBottom: 16 }}>
+              Add items to your basket, choose a pickup time, and pay when you collect. No delivery fees.
+            </p>
+            <a href="#menu" className="btn btn-olive btn-pill" style={{ display: "inline-block" }}>
+              View Menu
+            </a>
+          </div>
+        </div>
+      </div>
+    </header>
   );
-}
-
-function getHeroImage(cuisine) {
-  const lower = cuisine.toLowerCase();
-  for (const [key, url] of Object.entries(HERO_IMAGES)) {
-    if (key !== "default" && lower.includes(key)) return url;
-  }
-  return HERO_IMAGES.default;
 }

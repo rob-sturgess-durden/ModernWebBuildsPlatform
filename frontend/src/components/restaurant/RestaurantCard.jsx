@@ -3,20 +3,18 @@ import { Link } from "react-router-dom";
 export default function RestaurantCard({ restaurant }) {
   return (
     <Link to={`/${restaurant.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
-      <div className="card" style={{ cursor: "pointer" }}>
-        <div style={{ fontSize: "2.5rem", marginBottom: "0.8rem" }}>
+      <article className="menu-card">
+        <div style={{ fontSize: "2.2rem", marginBottom: "0.5rem" }}>
           {getCuisineEmoji(restaurant.cuisine_type)}
         </div>
-        <h3 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-          {restaurant.name}
-        </h3>
-        <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+        <h3>{restaurant.name}</h3>
+        <p style={{ color: "var(--text-light)", fontSize: "0.9rem", margin: 0 }}>
           {restaurant.cuisine_type.split("(")[0].trim()}
         </p>
-        <p style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
+        <p style={{ color: "var(--meta)", fontSize: "0.85rem", margin: 0 }}>
           {restaurant.address}
         </p>
-      </div>
+      </article>
     </Link>
   );
 }

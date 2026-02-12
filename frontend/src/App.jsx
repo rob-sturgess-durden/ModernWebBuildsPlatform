@@ -20,7 +20,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="eats-page" style={{ display: "flex", flexDirection: "column" }}>
       <Header />
       <main style={{ flex: 1 }}>
         <Routes>

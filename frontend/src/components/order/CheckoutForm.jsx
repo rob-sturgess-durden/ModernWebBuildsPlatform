@@ -5,13 +5,12 @@ import { placeOrder } from "../../api/client";
 function generateTimeSlots() {
   const slots = [];
   const now = new Date();
-  // Start from 30 mins from now, rounded to next 15-min slot
   const start = new Date(now.getTime() + 30 * 60000);
   start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
 
   for (let i = 0; i < 20; i++) {
     const slot = new Date(start.getTime() + i * 15 * 60000);
-    if (slot.getHours() >= 22) break; // cap at 10pm
+    if (slot.getHours() >= 22) break;
     slots.push(slot);
   }
   return slots;
@@ -66,10 +65,13 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
   };
 
   return (
-    <div className="card" style={{ maxWidth: 500, margin: "0 auto" }}>
-      <h3 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: "1.5rem" }}>Checkout</h3>
+    <div className="contact-card" style={{ maxWidth: 500, margin: "0 auto" }}>
+      <div style={{ marginBottom: "1.5rem" }}>
+        <p className="eyebrow">Checkout</p>
+        <h2 style={{ fontFamily: '"Fraunces", serif', margin: "8px 0 0" }}>Complete your order</h2>
+      </div>
 
-      {error && <div className="error" style={{ marginBottom: "1rem" }}>{error}</div>}
+      {error && <div className="error" style={{ marginBottom: "1rem", padding: "0.75rem" }}>{error}</div>}
 
       <form onSubmit={handleSubmit}>
         <div className="form-group">
@@ -104,7 +106,7 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
         </div>
 
         <div className="form-group">
-          <label>Pickup Time *</label>
+          <label>Pickup time *</label>
           <select
             value={form.pickup_time}
             onChange={(e) => setForm({ ...form, pickup_time: e.target.value })}
@@ -120,7 +122,7 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
         </div>
 
         <div className="form-group">
-          <label>Special Instructions</label>
+          <label>Special instructions</label>
           <textarea
             value={form.special_instructions}
             onChange={(e) => setForm({ ...form, special_instructions: e.target.value })}
@@ -129,19 +131,19 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
           />
         </div>
 
-        <div style={{ borderTop: "1px solid #eee", paddingTop: "1rem", marginTop: "0.5rem" }}>
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "1rem", marginTop: "0.5rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1.1rem", marginBottom: "1rem" }}>
             <span>Total</span>
             <span>£{subtotal.toFixed(2)}</span>
           </div>
-          <p style={{ color: "var(--text-light)", fontSize: "0.85rem", marginBottom: "1rem" }}>
+          <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "1rem" }}>
             Pay at the restaurant when you collect your order.
           </p>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={submitting}>
-              {submitting ? "Placing Order..." : "Place Order"}
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <button type="submit" className="btn btn-olive btn-pill" style={{ flex: 1 }} disabled={submitting}>
+              {submitting ? "Placing order…" : "Place order"}
             </button>
-            <button type="button" className="btn btn-outline" onClick={onCancel}>
+            <button type="button" className="btn btn-secondary" onClick={onCancel}>
               Back
             </button>
           </div>

@@ -6,8 +6,10 @@ export default function Basket({ onCheckout }) {
   if (basket.items.length === 0) return null;
 
   return (
-    <div className="card" style={{ position: "sticky", top: 80 }}>
-      <h3 style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: "1rem" }}>Your Basket</h3>
+    <div className="hero-card" style={{ position: "sticky", top: 100 }}>
+      <div className="card-header">
+        <h3 style={{ fontFamily: '"Fraunces", serif', margin: "0 0 16px" }}>Your basket</h3>
+      </div>
 
       {basket.items.map((item) => (
         <div
@@ -16,34 +18,34 @@ export default function Basket({ onCheckout }) {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            padding: "0.6rem 0",
+            padding: "0.75rem 0",
             borderBottom: "1px solid #eee",
           }}
         >
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 500, fontSize: "0.9rem" }}>{item.name}</div>
-            <div style={{ color: "var(--text-light)", fontSize: "0.8rem" }}>
+            <div style={{ fontWeight: 500, fontSize: "0.95rem" }}>{item.name}</div>
+            <div style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
               £{item.price.toFixed(2)} each
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <button
-              className="btn btn-outline btn-sm"
-              style={{ padding: "0.2rem 0.5rem", minWidth: 28 }}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: "0.25rem 0.6rem", minWidth: 32 }}
               onClick={() => removeItem(item.id)}
             >
-              -
+              −
             </button>
-            <span style={{ fontWeight: 600, minWidth: 20, textAlign: "center" }}>{item.quantity}</span>
+            <span style={{ fontWeight: 600, minWidth: 24, textAlign: "center" }}>{item.quantity}</span>
             <button
-              className="btn btn-outline btn-sm"
-              style={{ padding: "0.2rem 0.5rem", minWidth: 28 }}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: "0.25rem 0.6rem", minWidth: 32 }}
               onClick={() => updateQuantity(item.id, item.quantity + 1)}
             >
               +
             </button>
           </div>
-          <div style={{ fontWeight: 600, minWidth: 60, textAlign: "right" }}>
+          <div style={{ fontWeight: 700, minWidth: 60, textAlign: "right", color: "var(--burnt)" }}>
             £{(item.price * item.quantity).toFixed(2)}
           </div>
         </div>
@@ -56,17 +58,19 @@ export default function Basket({ onCheckout }) {
           padding: "1rem 0 0.5rem",
           fontWeight: 700,
           fontSize: "1.1rem",
+          borderTop: "1px solid #eee",
+          marginTop: "0.5rem",
         }}
       >
         <span>Total</span>
         <span>£{subtotal.toFixed(2)}</span>
       </div>
 
-      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
-        <button className="btn btn-primary" style={{ flex: 1 }} onClick={onCheckout}>
+      <div className="card-footer" style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
+        <button className="btn btn-olive btn-pill" style={{ flex: 1 }} onClick={onCheckout}>
           Checkout
         </button>
-        <button className="btn btn-outline btn-sm" onClick={clearBasket}>
+        <button className="btn btn-secondary btn-sm" onClick={clearBasket}>
           Clear
         </button>
       </div>

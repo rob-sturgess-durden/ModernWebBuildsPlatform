@@ -14,7 +14,7 @@ export default function MapWidget({ lat, lng, name, address }) {
   if (!lat || !lng) return null;
 
   return (
-    <div style={{ borderRadius: 12, overflow: "hidden", boxShadow: "var(--card-shadow)" }}>
+    <div style={{ borderRadius: 16, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.06)" }}>
       <MapContainer
         center={[lat, lng]}
         zoom={16}

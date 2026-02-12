@@ -7,30 +7,30 @@ const TAG_CLASSES = {
 
 export default function MenuItem({ item, onAdd }) {
   return (
-    <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-      <div style={{ flex: 1 }}>
-        <h4 style={{ fontSize: "1.05rem", fontWeight: 600, marginBottom: "0.3rem" }}>{item.name}</h4>
+    <article className="menu-card" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 14 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h3 style={{ fontSize: "1.05rem", marginBottom: 8 }}>{item.name}</h3>
         {item.description && (
-          <p style={{ color: "var(--text-light)", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+          <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: 8, lineHeight: 1.5 }}>
             {item.description}
           </p>
         )}
         <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
-          {item.dietary_tags.map((tag) => (
+          {item.dietary_tags?.map((tag) => (
             <span key={tag} className={`badge ${TAG_CLASSES[tag] || ""}`}>
               {tag}
             </span>
           ))}
         </div>
       </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: "1.1rem", marginBottom: "0.5rem" }}>
+      <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+        <span style={{ fontWeight: 700, color: "var(--burnt)", whiteSpace: "nowrap" }}>
           £{item.price.toFixed(2)}
-        </div>
-        <button className="btn btn-primary btn-sm" onClick={onAdd}>
+        </span>
+        <button className="btn btn-olive btn-sm btn-pill" onClick={onAdd}>
           Add
         </button>
       </div>
-    </div>
+    </article>
   );
 }

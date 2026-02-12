@@ -38,12 +38,16 @@ logs/
 *.tmp
 *.temp
 
+# Python virtual environment
+.venv/
+venv/
+
 # Node modules
 node_modules/
 frontend/dist/
 
 # SQLite database
-backend/data/*.db
+backend/data/
 
 # PEM files
 *.pem
