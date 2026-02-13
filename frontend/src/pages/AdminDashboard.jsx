@@ -9,6 +9,7 @@ import {
   deleteMenuItem,
   getAdminCategories,
   addCategory,
+  uploadImage,
 } from "../api/client";
 
 const STATUS_TABS = ["all", "pending", "confirmed", "ready", "collected", "cancelled"];
@@ -27,8 +28,16 @@ export default function AdminDashboard() {
   const [error, setError] = useState(null);
 
   // New item form
-  const [newItem, setNewItem] = useState({ name: "", description: "", price: "", category_id: "" });
+  const [newItem, setNewItem] = useState({ name: "", description: "", price: "", category_id: "", image_url: "" });
+  const [newItemFile, setNewItemFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [newCat, setNewCat] = useState("");
+
+  // Edit item form
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editItem, setEditItem] = useState({ name: "", description: "", price: "", category_id: "", image_url: "", is_available: true });
+  const [editFile, setEditFile] = useState(null);
+  const [editUploading, setEditUploading] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -101,11 +110,26 @@ export default function AdminDashboard() {
         description: newItem.description,
         price: parseFloat(newItem.price),
         category_id: newItem.category_id ? parseInt(newItem.category_id) : null,
+        image_url: newItem.image_url || null,
       });
-      setNewItem({ name: "", description: "", price: "", category_id: "" });
+      setNewItem({ name: "", description: "", price: "", category_id: "", image_url: "" });
+      setNewItemFile(null);
       loadMenu();
     } catch (e) {
       alert(e.message);
+    }
+  };
+
+  const handleUploadNewItemImage = async () => {
+    if (!newItemFile) return;
+    setUploading(true);
+    try {
+      const result = await uploadImage(token, newItemFile, { kind: "menu" });
+      setNewItem((prev) => ({ ...prev, image_url: result.url }));
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -122,6 +146,60 @@ export default function AdminDashboard() {
     if (!confirm("Delete this menu item?")) return;
     try {
       await deleteMenuItem(token, itemId);
+      loadMenu();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const startEdit = (item) => {
+    setEditingItemId(item.id);
+    setEditFile(null);
+    setEditItem({
+      name: item.name || "",
+      description: item.description || "",
+      price: String(item.price ?? ""),
+      category_id: item.category_id ? String(item.category_id) : "",
+      image_url: item.image_url || "",
+      is_available: !!item.is_available,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingItemId(null);
+    setEditFile(null);
+    setEditItem({ name: "", description: "", price: "", category_id: "", image_url: "", is_available: true });
+  };
+
+  const handleUploadEditImage = async () => {
+    if (!editFile) return;
+    setEditUploading(true);
+    try {
+      const result = await uploadImage(token, editFile, { kind: "menu" });
+      setEditItem((prev) => ({ ...prev, image_url: result.url }));
+      setEditFile(null);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setEditUploading(false);
+    }
+  };
+
+  const saveEdit = async (itemId) => {
+    if (!editItem.name || !editItem.price) {
+      alert("Name and price are required");
+      return;
+    }
+    try {
+      await updateMenuItem(token, itemId, {
+        name: editItem.name,
+        description: editItem.description || null,
+        price: parseFloat(editItem.price),
+        category_id: editItem.category_id ? parseInt(editItem.category_id) : null,
+        image_url: editItem.image_url || null,
+        is_available: !!editItem.is_available,
+      });
+      cancelEdit();
       loadMenu();
     } catch (e) {
       alert(e.message);
@@ -242,6 +320,21 @@ export default function AdminDashboard() {
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label>Image URL</label>
+                <input value={newItem.image_url} onChange={(e) => setNewItem({ ...newItem, image_url: e.target.value })} placeholder="https://..." />
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setNewItemFile(e.target.files?.[0] || null)}
+                    style={{ flex: 1, minWidth: 220 }}
+                  />
+                  <button type="button" className="btn btn-outline btn-sm" onClick={handleUploadNewItemImage} disabled={!newItemFile || uploading}>
+                    {uploading ? "Uploading..." : "Upload"}
+                  </button>
+                </div>
+              </div>
             </div>
             <button type="submit" className="btn btn-primary btn-sm">Add Item</button>
           </form>
@@ -256,10 +349,23 @@ export default function AdminDashboard() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <h4 style={{ fontWeight: 600 }}>{item.name}</h4>
+                      {item.image_url && (
+                        <img
+                          className="menu-item-thumb"
+                          src={item.image_url}
+                          alt={item.name}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          style={{ marginTop: 8 }}
+                        />
+                      )}
                       {item.description && <p style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>{item.description}</p>}
                       <p style={{ fontWeight: 700, marginTop: "0.3rem" }}>£{item.price.toFixed(2)}</p>
                     </div>
-                    <div style={{ display: "flex", gap: "0.3rem" }}>
+                    <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => startEdit(item)}>
+                        Edit Item
+                      </button>
                       <button
                         className={`btn btn-sm ${item.is_available ? "btn-warning" : "btn-success"}`}
                         onClick={() => handleToggleAvailability(item)}
@@ -271,6 +377,66 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   </div>
+
+                  {editingItemId === item.id && (
+                    <div style={{ marginTop: 14, borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 14 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
+                        <div className="form-group">
+                          <label>Name *</label>
+                          <input value={editItem.name} onChange={(e) => setEditItem({ ...editItem, name: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                          <label>Price (£) *</label>
+                          <input type="number" step="0.01" value={editItem.price} onChange={(e) => setEditItem({ ...editItem, price: e.target.value })} />
+                        </div>
+                        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                          <label>Description</label>
+                          <input value={editItem.description} onChange={(e) => setEditItem({ ...editItem, description: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                          <label>Category</label>
+                          <select value={editItem.category_id} onChange={(e) => setEditItem({ ...editItem, category_id: e.target.value })}>
+                            <option value="">No category</option>
+                            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ display: "flex", alignItems: "center", gap: "0.5rem", paddingTop: "1.5rem" }}>
+                          <input
+                            type="checkbox"
+                            checked={editItem.is_available}
+                            onChange={(e) => setEditItem({ ...editItem, is_available: e.target.checked })}
+                            style={{ width: "auto" }}
+                            id={`avail_${item.id}`}
+                          />
+                          <label htmlFor={`avail_${item.id}`} style={{ margin: 0 }}>Available</label>
+                        </div>
+                        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                          <label>Image URL</label>
+                          <input value={editItem.image_url} onChange={(e) => setEditItem({ ...editItem, image_url: e.target.value })} placeholder="https://..." />
+                          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => setEditFile(e.target.files?.[0] || null)}
+                              style={{ flex: 1, minWidth: 220 }}
+                            />
+                            <button type="button" className="btn btn-outline btn-sm" onClick={handleUploadEditImage} disabled={!editFile || editUploading}>
+                              {editUploading ? "Uploading..." : "Upload"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "0.5rem", marginTop: 10 }}>
+                        <button type="button" className="btn btn-primary btn-sm" onClick={() => saveEdit(item.id)}>
+                          Save
+                        </button>
+                        <button type="button" className="btn btn-outline btn-sm" onClick={cancelEdit}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

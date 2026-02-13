@@ -64,11 +64,21 @@ class DeliverooScraper(BaseScraper):
                     price = price.get("fractional", 0) / 100
                 elif isinstance(price, str):
                     price = float(price.replace("£", "").strip() or 0)
+                image_url = (
+                    data.get("image")
+                    or data.get("imageUrl")
+                    or data.get("image_url")
+                    or data.get("photo")
+                    or data.get("photoUrl")
+                )
+                if isinstance(image_url, dict):
+                    image_url = image_url.get("url")
                 items.append({
                     "name": str(data["name"]),
                     "description": str(data.get("description", "")),
                     "price": float(price),
                     "category": str(data.get("categoryName", data.get("category", "Other"))),
+                    "image_url": image_url if isinstance(image_url, str) else None,
                     "source": "deliveroo",
                 })
             else:
@@ -106,11 +116,14 @@ class DeliverooScraper(BaseScraper):
                     except ValueError:
                         continue
                     desc_el = el.find("p")
+                    img_el = el.find("img")
+                    image_url = img_el.get("src") if img_el else None
                     items.append({
                         "name": name,
                         "description": desc_el.get_text(strip=True) if desc_el and desc_el != name_el else "",
                         "price": price,
                         "category": current_category,
+                        "image_url": image_url,
                         "source": "deliveroo",
                     })
 

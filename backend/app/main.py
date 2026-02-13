@@ -1,8 +1,17 @@
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from .database import init_db
-from .routers import restaurants, menu, orders, admin, superadmin
+from . import config
+from .routers import restaurants, menu, orders, admin, superadmin, webhooks, sendgrid_inbound, uploads
+
+# Ensure upload directory exists before StaticFiles mounts (Starlette checks at import-time).
+try:
+    os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+except Exception:
+    pass
 
 
 @asynccontextmanager
@@ -26,6 +35,12 @@ app.include_router(menu.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(superadmin.router, prefix="/api")
+app.include_router(webhooks.router, prefix="/api")
+app.include_router(sendgrid_inbound.router, prefix="/api")
+app.include_router(uploads.router, prefix="/api")
+
+# Serve uploaded media via backend so nginx only needs to proxy /api/*.
+app.mount("/api/media", StaticFiles(directory=config.UPLOAD_DIR), name="media")
 
 
 @app.get("/api/health")

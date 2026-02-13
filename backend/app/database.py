@@ -32,6 +32,8 @@ def init_db():
                 cuisine_type TEXT NOT NULL,
                 latitude REAL,
                 longitude REAL,
+                logo_url TEXT,
+                banner_url TEXT,
                 instagram_handle TEXT,
                 facebook_handle TEXT,
                 phone TEXT,
@@ -77,6 +79,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 restaurant_id INTEGER NOT NULL,
                 order_number TEXT NOT NULL UNIQUE,
+                owner_action_token TEXT,
                 customer_name TEXT NOT NULL,
                 customer_phone TEXT NOT NULL,
                 customer_email TEXT,
@@ -106,4 +109,43 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_orders_restaurant_status ON orders(restaurant_id, status);
             CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id);
             CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
+
+            CREATE TABLE IF NOT EXISTS whatsapp_optins (
+                phone TEXT PRIMARY KEY,
+                opted_in INTEGER NOT NULL DEFAULT 0,
+                source TEXT DEFAULT 'whatsapp',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS inbound_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                provider TEXT NOT NULL,      -- sendgrid|twilio
+                channel TEXT NOT NULL,       -- email|whatsapp
+                direction TEXT NOT NULL,     -- inbound|outbound
+                from_addr TEXT,
+                to_addr TEXT,
+                subject TEXT,
+                body_text TEXT,
+                body_html TEXT,
+                order_number TEXT,
+                action TEXT,
+                status TEXT,                 -- ok|ignored|error
+                meta_json TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_inbound_messages_created ON inbound_messages(created_at);
+            CREATE INDEX IF NOT EXISTS idx_inbound_messages_order ON inbound_messages(order_number);
         """)
+
+        # Lightweight migrations for existing SQLite files.
+        order_columns = [r["name"] for r in db.execute("PRAGMA table_info(orders)").fetchall()]
+        if "owner_action_token" not in order_columns:
+            db.execute("ALTER TABLE orders ADD COLUMN owner_action_token TEXT")
+
+        restaurant_columns = [r["name"] for r in db.execute("PRAGMA table_info(restaurants)").fetchall()]
+        if "logo_url" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN logo_url TEXT")
+        if "banner_url" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN banner_url TEXT")

@@ -4,9 +4,19 @@ export default function RestaurantCard({ restaurant }) {
   return (
     <Link to={`/${restaurant.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
       <article className="menu-card">
-        <div style={{ fontSize: "2.2rem", marginBottom: "0.5rem" }}>
-          {getCuisineEmoji(restaurant.cuisine_type)}
-        </div>
+        {restaurant.logo_url ? (
+          <img
+            className="restaurant-logo"
+            src={restaurant.logo_url}
+            alt={`${restaurant.name} logo`}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="restaurant-logo restaurant-logo--fallback" aria-hidden="true">
+            {getCuisineEmoji(restaurant.cuisine_type)}
+          </div>
+        )}
         <h3>{restaurant.name}</h3>
         <p style={{ color: "var(--text-light)", fontSize: "0.9rem", margin: 0 }}>
           {restaurant.cuisine_type.split("(")[0].trim()}

@@ -12,6 +12,8 @@ class RestaurantSummary(BaseModel):
     address: str
     cuisine_type: str
     theme: str
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
 
 class RestaurantDetail(RestaurantSummary):
     latitude: Optional[float] = None
@@ -37,6 +39,8 @@ class RestaurantDetail(RestaurantSummary):
             cuisine_type=row["cuisine_type"],
             latitude=row["latitude"],
             longitude=row["longitude"],
+            logo_url=row["logo_url"] if "logo_url" in row.keys() else None,
+            banner_url=row["banner_url"] if "banner_url" in row.keys() else None,
             instagram_handle=row["instagram_handle"],
             facebook_handle=row["facebook_handle"],
             phone=row["phone"],
@@ -164,6 +168,8 @@ class RestaurantCreate(BaseModel):
     cuisine_type: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
@@ -181,6 +187,8 @@ class RestaurantUpdate(BaseModel):
     cuisine_type: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
@@ -201,6 +209,8 @@ class RestaurantAdmin(BaseModel):
     cuisine_type: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
@@ -215,3 +225,21 @@ class RestaurantAdmin(BaseModel):
     created_at: Optional[str] = None
     order_count: int = 0
     menu_item_count: int = 0
+
+
+# --- Messages (Super Admin) ---
+
+class InboundMessage(BaseModel):
+    id: int
+    provider: str
+    channel: str
+    direction: str
+    from_addr: Optional[str] = None
+    to_addr: Optional[str] = None
+    subject: Optional[str] = None
+    body_text: Optional[str] = None
+    body_html: Optional[str] = None
+    order_number: Optional[str] = None
+    action: Optional[str] = None
+    status: Optional[str] = None
+    created_at: str

@@ -69,6 +69,7 @@ class BaseScraper:
                     "description": mi.get("description", ""),
                     "price": price,
                     "category": category_name,
+                    "image_url": mi.get("image") if isinstance(mi.get("image"), str) else None,
                 })
         return items
 

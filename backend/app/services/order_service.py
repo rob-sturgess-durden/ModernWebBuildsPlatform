@@ -1,3 +1,4 @@
+import secrets
 from ..database import get_db
 
 VALID_TRANSITIONS = {
@@ -31,6 +32,7 @@ def generate_order_number(restaurant_id: int) -> str:
 def create_order(data: dict) -> dict:
     """Create a new order and return it."""
     order_number = generate_order_number(data["restaurant_id"])
+    owner_action_token = secrets.token_urlsafe(24)
 
     with get_db() as db:
         # Validate all menu items exist and belong to this restaurant
@@ -58,12 +60,13 @@ def create_order(data: dict) -> dict:
         # Insert order
         cursor = db.execute(
             """INSERT INTO orders (restaurant_id, order_number, customer_name, customer_phone,
-               customer_email, pickup_time, special_instructions, subtotal, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')""",
+               customer_email, pickup_time, special_instructions, subtotal, status, owner_action_token)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
             (
                 data["restaurant_id"], order_number, data["customer_name"],
                 data["customer_phone"], data.get("customer_email"),
                 data["pickup_time"], data.get("special_instructions"), subtotal,
+                owner_action_token,
             ),
         )
         order_id = cursor.lastrowid
@@ -94,6 +97,7 @@ def create_order(data: dict) -> dict:
         "special_instructions": data.get("special_instructions"),
         "subtotal": subtotal,
         "status": "pending",
+        "owner_action_token": owner_action_token,
         "items": [
             {
                 "id": 0,

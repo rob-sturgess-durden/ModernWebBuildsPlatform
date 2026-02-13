@@ -215,6 +215,26 @@ a:hover { opacity: 0.85; }
   font-size: 14px;
 }
 
+.footer-links {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.footer-links a {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.footer-links a:hover {
+  color: rgba(255, 255, 255, 0.95);
+  opacity: 1;
+}
+
+.footer-sep {
+  margin: 0 10px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
 /* Form elements */
 input, textarea, select {
   width: 100%;
@@ -258,6 +278,108 @@ label {
 
 /* Status badges */
 .status-pending { background: #fef3c7; color: #92400e; }
+
+/* Restaurant branding */
+.restaurant-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.restaurant-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.restaurant-logo--fallback {
+  color: var(--white);
+}
+
+.restaurant-logo--hero {
+  width: 64px;
+  height: 64px;
+}
+
+.restaurant-hero .lede,
+.restaurant-hero .hero-meta p,
+.restaurant-hero .eyebrow {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.restaurant-hero h1 {
+  color: var(--white);
+}
+
+/* Menu item images */
+.menu-item-card {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.menu-item-media {
+  width: 92px;
+  height: 92px;
+  flex: 0 0 92px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.menu-item-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.menu-item-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* Keep map behind overlays/panels */
+.contact-card,
+.card {
+  position: relative;
+  z-index: 1;
+}
+
+.leaflet-container {
+  z-index: 0;
+}
+
+@media (max-width: 560px) {
+  .menu-item-media {
+    width: 76px;
+    height: 76px;
+    flex-basis: 76px;
+  }
+  .restaurant-logo {
+    width: 46px;
+    height: 46px;
+  }
+  .restaurant-logo--hero {
+    width: 56px;
+    height: 56px;
+  }
+}
 .status-confirmed { background: #dbeafe; color: #1e40af; }
 .status-ready { background: #dcfce7; color: #166534; }
 .status-collected { background: #e2e8f0; color: #475569; }

@@ -7,7 +7,17 @@ const TAG_CLASSES = {
 
 export default function MenuItem({ item, onAdd }) {
   return (
-    <article className="menu-card" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 14 }}>
+    <article className="menu-card menu-item-card">
+      {item.image_url && (
+        <div className="menu-item-media">
+          <img
+            src={item.image_url}
+            alt={item.name}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <h3 style={{ fontSize: "1.05rem", marginBottom: 8 }}>{item.name}</h3>
         {item.description && (

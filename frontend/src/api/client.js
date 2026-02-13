@@ -39,6 +39,20 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+async function upload(path, formData, headers = {}) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+    headers,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(formatApiError(err, `Upload failed (${res.status})`));
+  }
+  return res.json();
+}
+
 export function getRestaurants() {
   return request("/restaurants");
 }
@@ -187,4 +201,23 @@ export function regenerateToken(token, id) {
     method: "POST",
     headers: superHeaders(token),
   });
+}
+
+export function getSuperadminMessages(token, options = {}) {
+  const { ordersOnly = false, q = "", limit = 100 } = options;
+  const params = new URLSearchParams();
+  if (ordersOnly) params.set("orders_only", "true");
+  if (q) params.set("q", q);
+  if (limit) params.set("limit", String(limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request(`/superadmin/messages${suffix}`, { headers: superHeaders(token) });
+}
+
+// Uploads (admin or superadmin token)
+export function uploadImage(token, file, { kind = "menu", restaurantId = null } = {}) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("kind", kind);
+  if (restaurantId != null) fd.append("restaurant_id", String(restaurantId));
+  return upload("/uploads/image", fd, { Authorization: `Bearer ${token}` });
 }

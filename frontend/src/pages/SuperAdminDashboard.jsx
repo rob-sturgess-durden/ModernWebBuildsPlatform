@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import {
   getSuperadminStats,
   getSuperadminRestaurants,
+  getSuperadminMessages,
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
   regenerateToken,
+  uploadImage,
 } from "../api/client";
 
 const THEMES = ["modern", "classic", "dark"];
@@ -15,13 +17,21 @@ export default function SuperAdminDashboard() {
   const navigate = useNavigate();
   const token = localStorage.getItem("superadmin_token");
 
+  const [view, setView] = useState("restaurants"); // restaurants | messages
   const [stats, setStats] = useState(null);
   const [restaurants, setRestaurants] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [ordersOnly, setOrdersOnly] = useState(false);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null); // restaurant id being edited, or "new"
   const [form, setForm] = useState(emptyForm());
   const [showTokenFor, setShowTokenFor] = useState(null);
+  const [logoFile, setLogoFile] = useState(null);
+  const [bannerFile, setBannerFile] = useState(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -51,6 +61,23 @@ export default function SuperAdminDashboard() {
     }
     loadData();
   }, [loadData, navigate, token]);
+
+  const loadMessages = useCallback(async () => {
+    setMessagesLoading(true);
+    setError(null);
+    try {
+      const data = await getSuperadminMessages(token, { ordersOnly, q: search, limit: 200 });
+      setMessages(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [ordersOnly, search, token]);
+
+  useEffect(() => {
+    if (view === "messages") loadMessages();
+  }, [view, loadMessages]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -100,12 +127,16 @@ export default function SuperAdminDashboard() {
 
   const handleEdit = (restaurant) => {
     setEditing(restaurant.id);
+    setLogoFile(null);
+    setBannerFile(null);
     setForm({
       name: restaurant.name,
       address: restaurant.address,
       cuisine_type: restaurant.cuisine_type,
       latitude: restaurant.latitude || "",
       longitude: restaurant.longitude || "",
+      logo_url: restaurant.logo_url || "",
+      banner_url: restaurant.banner_url || "",
       instagram_handle: restaurant.instagram_handle || "",
       facebook_handle: restaurant.facebook_handle || "",
       phone: restaurant.phone || "",
@@ -123,6 +154,26 @@ export default function SuperAdminDashboard() {
     navigate("/superadmin");
   };
 
+  const handleUploadRestaurantMedia = async (kind) => {
+    if (editing === "new") {
+      alert("Create the restaurant first, then upload media.");
+      return;
+    }
+    const file = kind === "logo" ? logoFile : bannerFile;
+    if (!file) return;
+    setMediaUploading(true);
+    try {
+      const result = await uploadImage(token, file, { kind, restaurantId: editing });
+      setForm((prev) => ({ ...prev, [`${kind}_url`]: result.url }));
+      if (kind === "logo") setLogoFile(null);
+      if (kind === "banner") setBannerFile(null);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setMediaUploading(false);
+    }
+  };
+
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
@@ -138,8 +189,24 @@ export default function SuperAdminDashboard() {
 
       {error && <div className="error" style={{ marginBottom: "1rem" }}>{error}</div>}
 
+      {/* View switch */}
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+        <button
+          className={`btn btn-sm ${view === "restaurants" ? "btn-primary" : "btn-outline"}`}
+          onClick={() => setView("restaurants")}
+        >
+          Restaurants
+        </button>
+        <button
+          className={`btn btn-sm ${view === "messages" ? "btn-primary" : "btn-outline"}`}
+          onClick={() => setView("messages")}
+        >
+          Messages
+        </button>
+      </div>
+
       {/* Stats */}
-      {stats && (
+      {stats && view === "restaurants" && (
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", marginBottom: "2rem" }}>
           <StatCard label="Restaurants" value={stats.restaurants} sub={`${stats.active_restaurants} active`} />
           <StatCard label="Total Orders" value={stats.total_orders} sub={`${stats.pending_orders} pending`} />
@@ -148,8 +215,90 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
+      {/* Messages view */}
+      {view === "messages" && (
+        <div>
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <div style={{ display: "flex", gap: "0.8rem", alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={ordersOnly}
+                  onChange={(e) => setOrdersOnly(e.target.checked)}
+                  style={{ width: "auto" }}
+                />
+                Orders only
+              </label>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search from/to/subject/body"
+                style={{ flex: 1, minWidth: 240 }}
+              />
+              <button className="btn btn-outline btn-sm" onClick={loadMessages} disabled={messagesLoading}>
+                {messagesLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+          </div>
+
+          {messagesLoading ? (
+            <div className="loading">Loading messages...</div>
+          ) : messages.length === 0 ? (
+            <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>
+              No inbound messages yet.
+            </p>
+          ) : (
+            <div className="grid grid-2">
+              {messages.map((m) => (
+                <div key={m.id} className="card">
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem", marginBottom: "0.5rem" }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>
+                        {m.provider}/{m.channel} <span style={{ color: "var(--text-light)", fontWeight: 500 }}>({m.direction})</span>
+                      </div>
+                      <div style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
+                        {m.created_at}
+                      </div>
+                    </div>
+                    {m.status && <span className={`badge ${m.status === "ok" ? "status-ready" : "status-pending"}`}>{m.status}</span>}
+                  </div>
+
+                  {m.order_number && (
+                    <div style={{ marginBottom: "0.5rem" }}>
+                      <strong>Order:</strong>{" "}
+                      <a href={`/order/${m.order_number}`} target="_blank" rel="noreferrer">
+                        {m.order_number}
+                      </a>
+                      {m.action && <span style={{ color: "var(--text-light)" }}> · {m.action}</span>}
+                    </div>
+                  )}
+
+                  {m.subject && (
+                    <div style={{ marginBottom: "0.5rem" }}>
+                      <strong>Subject:</strong> {m.subject}
+                    </div>
+                  )}
+
+                  <div style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>
+                    <div><strong>From:</strong> {m.from_addr || "-"}</div>
+                    <div><strong>To:</strong> {m.to_addr || "-"}</div>
+                  </div>
+
+                  {m.body_text && (
+                    <div style={{ marginTop: "0.8rem", fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>
+                      {m.body_text.slice(0, 600)}
+                      {m.body_text.length > 600 ? "..." : ""}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Add button */}
-      {editing === null && (
+      {view === "restaurants" && editing === null && (
         <div style={{ marginBottom: "1.5rem" }}>
           <button className="btn btn-primary" onClick={() => { setEditing("new"); setForm(emptyForm()); }}>
             + Add Restaurant
@@ -158,7 +307,7 @@ export default function SuperAdminDashboard() {
       )}
 
       {/* Add/Edit form */}
-      {editing !== null && (
+      {view === "restaurants" && editing !== null && (
         <div className="card" style={{ marginBottom: "2rem" }}>
           <h3 style={{ fontWeight: 600, marginBottom: "1rem" }}>
             {editing === "new" ? "Add Restaurant" : "Edit Restaurant"}
@@ -219,6 +368,48 @@ export default function SuperAdminDashboard() {
                 <label>Just Eat URL</label>
                 <input value={form.justeat_url} onChange={(e) => setForm({ ...form, justeat_url: e.target.value })} placeholder="https://just-eat.co.uk/restaurants-..." />
               </div>
+              <div className="form-group">
+                <label>Logo URL</label>
+                <input value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} placeholder="https://.../logo.png" />
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                    style={{ flex: 1, minWidth: 220 }}
+                    disabled={editing === "new"}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => handleUploadRestaurantMedia("logo")}
+                    disabled={editing === "new" || !logoFile || mediaUploading}
+                  >
+                    {mediaUploading ? "Uploading..." : "Upload"}
+                  </button>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Banner URL</label>
+                <input value={form.banner_url} onChange={(e) => setForm({ ...form, banner_url: e.target.value })} placeholder="https://.../banner.jpg" />
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setBannerFile(e.target.files?.[0] || null)}
+                    style={{ flex: 1, minWidth: 220 }}
+                    disabled={editing === "new"}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => handleUploadRestaurantMedia("banner")}
+                    disabled={editing === "new" || !bannerFile || mediaUploading}
+                  >
+                    {mediaUploading ? "Uploading..." : "Upload"}
+                  </button>
+                </div>
+              </div>
               <div className="form-group" style={{ display: "flex", alignItems: "center", gap: "0.5rem", paddingTop: "1.5rem" }}>
                 <input
                   type="checkbox"
@@ -243,6 +434,7 @@ export default function SuperAdminDashboard() {
       )}
 
       {/* Restaurant list */}
+      {view === "restaurants" && (
       <div className="grid grid-2">
         {restaurants.map((r) => (
           <div key={r.id} className="card" style={{ opacity: r.is_active ? 1 : 0.6 }}>
@@ -304,6 +496,7 @@ export default function SuperAdminDashboard() {
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -325,6 +518,8 @@ function emptyForm() {
     cuisine_type: "",
     latitude: "",
     longitude: "",
+    logo_url: "",
+    banner_url: "",
     instagram_handle: "",
     facebook_handle: "",
     phone: "",

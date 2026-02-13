@@ -9,7 +9,7 @@ router = APIRouter(prefix="/restaurants", tags=["restaurants"])
 def list_restaurants():
     with get_db() as db:
         rows = db.execute(
-            "SELECT id, name, slug, address, cuisine_type, theme FROM restaurants WHERE is_active = 1 ORDER BY name"
+            "SELECT id, name, slug, address, cuisine_type, theme, logo_url, banner_url FROM restaurants WHERE is_active = 1 ORDER BY name"
         ).fetchall()
     return [dict(r) for r in rows]
 
