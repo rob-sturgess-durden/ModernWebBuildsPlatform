@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getRestaurant, getMenu } from "../api/client";
+import { getRestaurant, getMenu, getInstagram } from "../api/client";
 import { useBasket } from "../context/BasketContext";
 import RestaurantHero from "../components/restaurant/RestaurantHero";
 import MapWidget from "../components/restaurant/MapWidget";
+import InstagramFeed from "../components/restaurant/InstagramFeed";
 import MenuSection from "../components/menu/MenuSection";
 import Basket from "../components/order/Basket";
 import CheckoutForm from "../components/order/CheckoutForm";
@@ -15,16 +16,18 @@ export default function RestaurantPage() {
 
   const [restaurant, setRestaurant] = useState(null);
   const [menu, setMenu] = useState([]);
+  const [instagram, setInstagram] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [checkout, setCheckout] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getRestaurant(slug), getMenu(slug)])
-      .then(([r, m]) => {
+    Promise.all([getRestaurant(slug), getMenu(slug), getInstagram(slug, 8).catch(() => [])])
+      .then(([r, m, ig]) => {
         setRestaurant(r);
         setMenu(m);
+        setInstagram(Array.isArray(ig) ? ig : []);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -58,6 +61,25 @@ export default function RestaurantPage() {
   return (
     <div>
       <RestaurantHero restaurant={restaurant} />
+
+      <section className="section" style={{ padding: "28px 6vw 0" }}>
+        <div className="container">
+          <div className="card" style={{ padding: "22px 24px" }}>
+            <p className="eyebrow">About</p>
+            <h2 style={{ fontFamily: '"Fraunces", serif', margin: "10px 0 10px" }}>
+              {restaurant.name}
+            </h2>
+            <p style={{ color: "var(--text-light)", lineHeight: 1.7, margin: 0 }}>
+              {restaurant.about_text?.trim()
+                ? restaurant.about_text
+                : "Tell customers what makes you special: what you serve, your story, and what to try first."}
+            </p>
+            <p style={{ marginTop: 12, color: "var(--text-light)", fontSize: "0.95rem" }}>
+              <strong style={{ color: "var(--ink)" }}>Address:</strong> {restaurant.address}
+            </p>
+          </div>
+        </div>
+      </section>
 
       <section id="menu" className="menu" style={{ padding: "72px 6vw" }}>
         <div className="container">
@@ -97,6 +119,8 @@ export default function RestaurantPage() {
           </div>
         </div>
       </section>
+
+      <InstagramFeed posts={instagram} handle={restaurant.instagram_handle} />
     </div>
   );
 }

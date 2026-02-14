@@ -65,6 +65,10 @@ export function getMenu(slug) {
   return request(`/restaurants/${slug}/menu`);
 }
 
+export function getInstagram(slug, limit = 8) {
+  return request(`/restaurants/${slug}/instagram?limit=${encodeURIComponent(limit)}`);
+}
+
 export function placeOrder(order) {
   return request("/orders", {
     method: "POST",
@@ -211,6 +215,32 @@ export function getSuperadminMessages(token, options = {}) {
   if (limit) params.set("limit", String(limit));
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return request(`/superadmin/messages${suffix}`, { headers: superHeaders(token) });
+}
+
+export function superPlacesSearch(token, { q, lat = null, lng = null, radius_m = null, limit = 12 } = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (lat != null) params.set("lat", String(lat));
+  if (lng != null) params.set("lng", String(lng));
+  if (radius_m != null) params.set("radius_m", String(radius_m));
+  if (limit != null) params.set("limit", String(limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request(`/superadmin/places/search${suffix}`, { headers: superHeaders(token) });
+}
+
+export function superPlacesImport(token, placeId) {
+  return request("/superadmin/places/import", {
+    method: "POST",
+    body: JSON.stringify({ place_id: placeId }),
+    headers: superHeaders(token),
+  });
+}
+
+export function superPlacesPhoto(token, photoName, max = 800) {
+  const params = new URLSearchParams();
+  params.set("name", photoName || "");
+  params.set("max", String(max));
+  return request(`/superadmin/places/photo?${params.toString()}`, { headers: superHeaders(token) });
 }
 
 // Uploads (admin or superadmin token)

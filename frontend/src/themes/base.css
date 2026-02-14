@@ -319,6 +319,48 @@ label {
   color: var(--white);
 }
 
+/* Restaurant banner (compact header for restaurant pages) */
+.restaurant-banner {
+  padding: 18px 6vw 22px;
+  background: var(--header-bg);
+  color: var(--white);
+}
+
+.restaurant-banner-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.restaurant-banner-text h1 {
+  font-family: "Fraunces", serif;
+  font-size: clamp(24px, 3.2vw, 38px);
+  margin: 0;
+  color: var(--white);
+  line-height: 1.15;
+}
+
+.restaurant-banner-sub {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.95rem;
+  max-width: 58ch;
+}
+
+.powered-by {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+}
+.powered-by:hover { color: var(--white); opacity: 1; }
+
 /* Menu item images */
 .menu-item-card {
   display: flex;
@@ -365,7 +407,66 @@ label {
   z-index: 0;
 }
 
+/* Instagram feed */
+.ig-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ig-card {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  aspect-ratio: 1 / 1;
+}
+
+.ig-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 240ms ease;
+}
+
+.ig-card:hover img { transform: scale(1.03); }
+
+.ig-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 10px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 55%);
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.ig-card:hover .ig-overlay { opacity: 1; }
+
+.ig-pill {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.ig-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: rgba(0, 0, 0, 0.55);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
 @media (max-width: 560px) {
+  .restaurant-banner-inner { flex-direction: column; align-items: flex-start; }
   .menu-item-media {
     width: 76px;
     height: 76px;
@@ -505,6 +606,7 @@ label {
   .site-header nav { flex-wrap: wrap; }
   .restaurant-layout { grid-template-columns: 1fr; }
   .section-title { font-size: 1.5rem; }
+  .ig-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 768px) {

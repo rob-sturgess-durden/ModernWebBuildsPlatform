@@ -30,6 +30,8 @@ def init_db():
                 slug TEXT NOT NULL UNIQUE,
                 address TEXT NOT NULL,
                 cuisine_type TEXT NOT NULL,
+                about_text TEXT,
+                google_place_id TEXT,
                 latitude REAL,
                 longitude REAL,
                 logo_url TEXT,
@@ -137,6 +139,12 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_inbound_messages_created ON inbound_messages(created_at);
             CREATE INDEX IF NOT EXISTS idx_inbound_messages_order ON inbound_messages(order_number);
+
+            CREATE TABLE IF NOT EXISTS instagram_cache (
+                instagram_handle TEXT PRIMARY KEY,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                json TEXT NOT NULL
+            );
         """)
 
         # Lightweight migrations for existing SQLite files.
@@ -149,3 +157,10 @@ def init_db():
             db.execute("ALTER TABLE restaurants ADD COLUMN logo_url TEXT")
         if "banner_url" not in restaurant_columns:
             db.execute("ALTER TABLE restaurants ADD COLUMN banner_url TEXT")
+        if "about_text" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN about_text TEXT")
+        if "google_place_id" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN google_place_id TEXT")
+
+        # Indexes that depend on migrated columns must be created after migrations.
+        db.execute("CREATE INDEX IF NOT EXISTS idx_restaurants_google_place_id ON restaurants(google_place_id)")

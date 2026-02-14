@@ -4,6 +4,9 @@ import {
   getSuperadminStats,
   getSuperadminRestaurants,
   getSuperadminMessages,
+  superPlacesSearch,
+  superPlacesImport,
+  superPlacesPhoto,
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
@@ -17,11 +20,18 @@ export default function SuperAdminDashboard() {
   const navigate = useNavigate();
   const token = localStorage.getItem("superadmin_token");
 
-  const [view, setView] = useState("restaurants"); // restaurants | messages
+  const [view, setView] = useState("restaurants"); // restaurants | messages | discover
   const [stats, setStats] = useState(null);
   const [restaurants, setRestaurants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverQuery, setDiscoverQuery] = useState("restaurants near me");
+  const [discoverLat, setDiscoverLat] = useState("");
+  const [discoverLng, setDiscoverLng] = useState("");
+  const [discoverRadius, setDiscoverRadius] = useState("2500");
+  const [discoverResults, setDiscoverResults] = useState([]);
+  const [placePhotos, setPlacePhotos] = useState({}); // photo_name -> photoUri
   const [ordersOnly, setOrdersOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -79,6 +89,64 @@ export default function SuperAdminDashboard() {
     if (view === "messages") loadMessages();
   }, [view, loadMessages]);
 
+  const runDiscover = useCallback(async () => {
+    setDiscoverLoading(true);
+    setError(null);
+    try {
+      const payload = await superPlacesSearch(token, {
+        q: discoverQuery,
+        lat: discoverLat ? parseFloat(discoverLat) : null,
+        lng: discoverLng ? parseFloat(discoverLng) : null,
+        radius_m: discoverRadius ? parseInt(discoverRadius, 10) : null,
+        limit: 20,
+      });
+      setDiscoverResults(payload.results || []);
+      setPlacePhotos({});
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }, [token, discoverQuery, discoverLat, discoverLng, discoverRadius]);
+
+  useEffect(() => {
+    // Lazy-load a few thumbnails to avoid hammering the API.
+    const names = (discoverResults || [])
+      .map((r) => r.photo_name)
+      .filter(Boolean)
+      .slice(0, 8);
+
+    let cancelled = false;
+    (async () => {
+      for (const name of names) {
+        if (cancelled) break;
+        if (placePhotos[name]) continue;
+        try {
+          const res = await superPlacesPhoto(token, name, 700);
+          if (!cancelled && res?.photoUri) {
+            setPlacePhotos((prev) => ({ ...prev, [name]: res.photoUri }));
+          }
+        } catch {
+          // ignore per-photo errors
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [discoverResults, token, placePhotos]);
+
+  const importPlace = async (placeId) => {
+    try {
+      await superPlacesImport(token, placeId);
+      await loadData();
+      alert("Imported. It’s now in your Restaurants list.");
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!form.name || !form.address || !form.cuisine_type) {
@@ -133,6 +201,7 @@ export default function SuperAdminDashboard() {
       name: restaurant.name,
       address: restaurant.address,
       cuisine_type: restaurant.cuisine_type,
+      about_text: restaurant.about_text || "",
       latitude: restaurant.latitude || "",
       longitude: restaurant.longitude || "",
       logo_url: restaurant.logo_url || "",
@@ -196,6 +265,12 @@ export default function SuperAdminDashboard() {
           onClick={() => setView("restaurants")}
         >
           Restaurants
+        </button>
+        <button
+          className={`btn btn-sm ${view === "discover" ? "btn-primary" : "btn-outline"}`}
+          onClick={() => setView("discover")}
+        >
+          Discover (Google)
         </button>
         <button
           className={`btn btn-sm ${view === "messages" ? "btn-primary" : "btn-outline"}`}
@@ -297,6 +372,89 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
+      {/* Discover view */}
+      {view === "discover" && (
+        <div>
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px 160px", gap: "0.8rem", alignItems: "end" }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Query</label>
+                <input value={discoverQuery} onChange={(e) => setDiscoverQuery(e.target.value)} placeholder="pizza in hackney" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Lat (optional)</label>
+                <input value={discoverLat} onChange={(e) => setDiscoverLat(e.target.value)} placeholder="51.5454" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Lng (optional)</label>
+                <input value={discoverLng} onChange={(e) => setDiscoverLng(e.target.value)} placeholder="-0.0556" />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Radius (m)</label>
+                <input value={discoverRadius} onChange={(e) => setDiscoverRadius(e.target.value)} placeholder="2500" />
+              </div>
+            </div>
+            <div style={{ marginTop: 10, display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn btn-primary btn-sm" onClick={runDiscover} disabled={discoverLoading}>
+                {discoverLoading ? "Searching..." : "Search"}
+              </button>
+              <span style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>
+                Uses server-side `GOOGLE_PLACES_API_KEY`. If results are empty, check the key + Places API is enabled in Google Cloud.
+              </span>
+            </div>
+          </div>
+
+          {discoverLoading ? (
+            <div className="loading">Searching…</div>
+          ) : discoverResults.length === 0 ? (
+            <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>
+              No results yet. Try a query like “restaurants in Hackney” and optionally add lat/lng.
+            </p>
+          ) : (
+            <div className="grid grid-2">
+              {discoverResults.map((p) => (
+                <div key={p.place_id} className="card">
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem", alignItems: "flex-start" }}>
+                    <div>
+                      {p.photo_name && placePhotos[p.photo_name] && (
+                        <div style={{ marginBottom: 10 }}>
+                          <img
+                            src={placePhotos[p.photo_name]}
+                            alt={`${p.name} photo`}
+                            style={{
+                              width: "100%",
+                              maxHeight: 160,
+                              objectFit: "cover",
+                              borderRadius: 14,
+                              border: "1px solid rgba(0,0,0,0.06)",
+                            }}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div style={{ fontWeight: 800 }}>{p.name}</div>
+                      <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: 6 }}>
+                        {p.address || "-"}
+                      </div>
+                      <div style={{ color: "var(--text-light)", fontSize: "0.85rem", marginTop: 6 }}>
+                        {p.primary_type_label || p.primary_type || "Restaurant"}
+                      </div>
+                    </div>
+                    <button className="btn btn-outline btn-sm" onClick={() => importPlace(p.place_id)}>
+                      Import
+                    </button>
+                  </div>
+                  <p style={{ marginTop: 10, color: "var(--text-light)", fontSize: "0.85rem" }}>
+                    Note: Google photos are short-lived URLs. Use them for preview, then upload a real banner/logo in the restaurant settings.
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Add button */}
       {view === "restaurants" && editing === null && (
         <div style={{ marginBottom: "1.5rem" }}>
@@ -337,6 +495,15 @@ export default function SuperAdminDashboard() {
               <div className="form-group">
                 <label>Phone</label>
                 <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+                <label>About (shown on restaurant page)</label>
+                <textarea
+                  rows={5}
+                  value={form.about_text}
+                  onChange={(e) => setForm({ ...form, about_text: e.target.value })}
+                  placeholder="A short intro about the restaurant, what you serve, and what to try."
+                />
               </div>
               <div className="form-group">
                 <label>Theme</label>
@@ -516,6 +683,7 @@ function emptyForm() {
     name: "",
     address: "",
     cuisine_type: "",
+    about_text: "",
     latitude: "",
     longitude: "",
     logo_url: "",

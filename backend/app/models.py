@@ -18,6 +18,7 @@ class RestaurantSummary(BaseModel):
 class RestaurantDetail(RestaurantSummary):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    about_text: Optional[str] = None
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
@@ -41,12 +42,22 @@ class RestaurantDetail(RestaurantSummary):
             longitude=row["longitude"],
             logo_url=row["logo_url"] if "logo_url" in row.keys() else None,
             banner_url=row["banner_url"] if "banner_url" in row.keys() else None,
+            about_text=row["about_text"] if "about_text" in row.keys() else None,
             instagram_handle=row["instagram_handle"],
             facebook_handle=row["facebook_handle"],
             phone=row["phone"],
             opening_hours=hours,
             theme=row["theme"],
         )
+
+class InstagramPost(BaseModel):
+    id: str
+    shortcode: str
+    permalink: str
+    media_url: str | None = None
+    caption: Optional[str] = None
+    timestamp: Optional[str] = None
+    is_video: bool = False
 
 
 # --- Menu ---
@@ -166,6 +177,7 @@ class RestaurantCreate(BaseModel):
     name: str
     address: str
     cuisine_type: str
+    about_text: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     logo_url: Optional[str] = None
@@ -180,11 +192,13 @@ class RestaurantCreate(BaseModel):
     justeat_url: Optional[str] = None
     opening_hours: Optional[dict] = None
     is_active: bool = True
+    google_place_id: Optional[str] = None
 
 class RestaurantUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     cuisine_type: Optional[str] = None
+    about_text: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     logo_url: Optional[str] = None
@@ -199,6 +213,7 @@ class RestaurantUpdate(BaseModel):
     justeat_url: Optional[str] = None
     opening_hours: Optional[dict] = None
     is_active: Optional[bool] = None
+    google_place_id: Optional[str] = None
 
 class RestaurantAdmin(BaseModel):
     """Full restaurant detail including admin-only fields."""
@@ -209,6 +224,7 @@ class RestaurantAdmin(BaseModel):
     cuisine_type: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    about_text: Optional[str] = None
     logo_url: Optional[str] = None
     banner_url: Optional[str] = None
     instagram_handle: Optional[str] = None
@@ -225,6 +241,7 @@ class RestaurantAdmin(BaseModel):
     created_at: Optional[str] = None
     order_count: int = 0
     menu_item_count: int = 0
+    google_place_id: Optional[str] = None
 
 
 # --- Messages (Super Admin) ---

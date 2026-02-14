@@ -14,16 +14,11 @@ export default function Header() {
             <p className="brand-tag">Local Restaurants • Click & Collect</p>
           </div>
         </Link>
-        <nav>
-          <Link to="/restaurants">Restaurants</Link>
-          <Link to="/admin">Admin</Link>
-          <Link to="/superadmin">Super Admin</Link>
-          {totalItems > 0 && basket.restaurantSlug && (
-            <Link to={`/${basket.restaurantSlug}`} className="cta">
-              Basket ({totalItems})
-            </Link>
-          )}
-        </nav>
+        {totalItems > 0 && basket.restaurantSlug && (
+          <Link to={`/${basket.restaurantSlug}`} className="cta">
+            Basket ({totalItems})
+          </Link>
+        )}
       </div>
     </header>
   );

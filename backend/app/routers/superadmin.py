@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from ..database import get_db
 from .. import config
 from ..models import RestaurantCreate, RestaurantUpdate, RestaurantAdmin, InboundMessage
+from ..services import google_places_service
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 TEMP_BYPASS_TOKEN = "1234Abcd"
@@ -90,6 +91,7 @@ def _row_to_admin(row, db) -> dict:
         cuisine_type=row["cuisine_type"],
         latitude=row["latitude"],
         longitude=row["longitude"],
+        about_text=row["about_text"] if "about_text" in row.keys() else None,
         logo_url=row["logo_url"] if "logo_url" in row.keys() else None,
         banner_url=row["banner_url"] if "banner_url" in row.keys() else None,
         instagram_handle=row["instagram_handle"],
@@ -106,6 +108,7 @@ def _row_to_admin(row, db) -> dict:
         created_at=row["created_at"],
         order_count=order_count,
         menu_item_count=menu_count,
+        google_place_id=row["google_place_id"] if "google_place_id" in row.keys() else None,
     )
 
 
@@ -170,15 +173,15 @@ def create_restaurant(body: dict | str = Body(...), authorization: str = Header(
 
         cursor = db.execute(
             """INSERT INTO restaurants
-               (name, slug, address, cuisine_type, latitude, longitude,
+               (name, slug, address, cuisine_type, about_text, google_place_id, latitude, longitude,
                 logo_url, banner_url,
                 instagram_handle, facebook_handle, phone, whatsapp_number,
                 owner_email, admin_token, theme, deliveroo_url, justeat_url,
                 is_active, opening_hours)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 model.name, slug, model.address, model.cuisine_type,
-                model.latitude, model.longitude, model.logo_url, model.banner_url,
+                model.about_text, model.google_place_id, model.latitude, model.longitude, model.logo_url, model.banner_url,
                 model.instagram_handle,
                 model.facebook_handle, model.phone, model.whatsapp_number,
                 model.owner_email, admin_token, model.theme,
@@ -214,6 +217,10 @@ def update_restaurant(restaurant_id: int, body: dict | str = Body(...), authoriz
             updates["address"] = model.address
         if model.cuisine_type is not None:
             updates["cuisine_type"] = model.cuisine_type
+        if model.about_text is not None:
+            updates["about_text"] = model.about_text
+        if model.google_place_id is not None:
+            updates["google_place_id"] = model.google_place_id
         if model.latitude is not None:
             updates["latitude"] = model.latitude
         if model.longitude is not None:
@@ -360,3 +367,81 @@ def list_messages(
         )
         for r in rows
     ]
+
+
+@router.get("/places/search")
+def places_search(
+    authorization: str = Header(...),
+    q: str = "",
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_m: int | None = None,
+    limit: int = 12,
+):
+    _require_superadmin(authorization)
+    try:
+        results = google_places_service.search_text(
+            q, lat=lat, lng=lng, radius_m=radius_m, limit=limit
+        )
+        return {"results": results}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/places/photo")
+def places_photo(
+    authorization: str = Header(...),
+    name: str = "",
+    max: int = 800,
+):
+    _require_superadmin(authorization)
+    try:
+        uri = google_places_service.get_photo_uri(name, max_height_px=max, max_width_px=max)
+        return {"photoUri": uri}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/places/import", response_model=RestaurantAdmin, status_code=201)
+def places_import(
+    authorization: str = Header(...),
+    body: dict | str = Body(...),
+):
+    _require_superadmin(authorization)
+    body = _coerce_json_object(body)
+    place_id = (body.get("place_id") or "").strip()
+    if not place_id:
+        raise HTTPException(status_code=422, detail="place_id is required")
+
+    try:
+        details = google_places_service.get_details(place_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Prevent duplicates on google_place_id
+    with get_db() as db:
+        existing = db.execute(
+            "SELECT id FROM restaurants WHERE google_place_id = ?",
+            (details.get("place_id"),),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="This place is already imported")
+
+    name = details.get("name") or "New Restaurant"
+    address = details.get("address") or "-"
+    cuisine = details.get("primary_type_label") or "Restaurant"
+
+    create_payload = RestaurantCreate(
+        name=name,
+        address=address,
+        cuisine_type=cuisine,
+        latitude=details.get("lat"),
+        longitude=details.get("lng"),
+        phone=details.get("phone"),
+        google_place_id=details.get("place_id"),
+        is_active=True,
+        theme="modern",
+    ).model_dump()
+
+    # Reuse existing create flow so slug/admin_token/etc are consistent.
+    return create_restaurant(create_payload, authorization=authorization)

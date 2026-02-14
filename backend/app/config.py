@@ -43,3 +43,6 @@ UPLOAD_BASE_PATH = os.getenv("UPLOAD_BASE_PATH", "/api/media")
 
 # Super admin - set this in .env to secure it
 SUPER_ADMIN_TOKEN = os.getenv("SUPER_ADMIN_TOKEN", "superadmin-change-me")
+
+# Google Places (server-side only)
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
