@@ -10,7 +10,9 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", str(Path(__file__).resolve().parent.p
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "+14155238886")
+TWILIO_SMS_FROM = os.getenv("TWILIO_SMS_FROM", "")
 WHATSAPP_ENABLED = os.getenv("WHATSAPP_ENABLED", "true").lower() == "true"
+SMS_ENABLED = os.getenv("SMS_ENABLED", "false").lower() == "true"
 TWILIO_VALIDATE_SIGNATURE = os.getenv("TWILIO_VALIDATE_SIGNATURE", "false").lower() == "true"
 TWILIO_OPTIN_CONTENT_SID = os.getenv("TWILIO_OPTIN_CONTENT_SID", "")
 TWILIO_OPTIN_ENABLED = os.getenv("TWILIO_OPTIN_ENABLED", "true").lower() == "true"
@@ -43,6 +45,9 @@ UPLOAD_BASE_PATH = os.getenv("UPLOAD_BASE_PATH", "/api/media")
 
 # Super admin - set this in .env to secure it
 SUPER_ADMIN_TOKEN = os.getenv("SUPER_ADMIN_TOKEN", "superadmin-change-me")
+
+# Production: directory containing built frontend (index.html + assets). Empty = don't serve static.
+STATIC_DIR = os.getenv("STATIC_DIR", "").strip()
 
 # Google Places (server-side only)
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")

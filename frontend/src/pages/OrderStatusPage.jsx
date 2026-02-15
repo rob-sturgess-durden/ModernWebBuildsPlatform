@@ -91,6 +91,44 @@ export default function OrderStatusPage() {
           Pay at the restaurant when you collect your order.
         </p>
 
+        {order.notification_whatsapp && order.status !== "collected" && order.status !== "cancelled" && (
+          <div style={{
+            marginTop: "1.5rem",
+            padding: "1rem 1.2rem",
+            background: "#dcfce7",
+            borderRadius: 12,
+            textAlign: "center",
+          }}>
+            <p style={{ fontWeight: 600, marginBottom: "0.6rem", color: "#166534" }}>
+              Get order updates on WhatsApp
+            </p>
+            <p style={{ fontSize: "0.85rem", color: "#15803d", marginBottom: "0.8rem" }}>
+              Tap below to receive live updates when your order is confirmed and ready to collect.
+            </p>
+            <a
+              href={`https://wa.me/${order.notification_whatsapp.replace("+", "")}?text=${encodeURIComponent(
+                `Hi! Please send me WhatsApp updates for my order ${order.order_number}. Thanks!`
+              )}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm"
+              style={{
+                background: "#25D366",
+                color: "#fff",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.6rem 1.2rem",
+                borderRadius: 8,
+              }}
+            >
+              <i className="fab fa-whatsapp" style={{ fontSize: "1.2rem" }} />
+              Receive updates on WhatsApp
+            </a>
+          </div>
+        )}
+
         <div style={{ textAlign: "center", marginTop: "1.5rem" }}>
           <Link to="/restaurants" className="btn btn-secondary">
             Back to Restaurants

@@ -104,6 +104,8 @@ def _row_to_admin(row, db) -> dict:
         deliveroo_url=row["deliveroo_url"],
         justeat_url=row["justeat_url"],
         is_active=bool(row["is_active"]),
+        status=row["status"] if "status" in row.keys() and row["status"] else "live",
+        preview_password=row["preview_password"] if "preview_password" in row.keys() else None,
         opening_hours=hours,
         created_at=row["created_at"],
         order_count=order_count,
@@ -177,8 +179,8 @@ def create_restaurant(body: dict | str = Body(...), authorization: str = Header(
                 logo_url, banner_url,
                 instagram_handle, facebook_handle, phone, whatsapp_number,
                 owner_email, admin_token, theme, deliveroo_url, justeat_url,
-                is_active, opening_hours)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                is_active, opening_hours, status, preview_password)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 model.name, slug, model.address, model.cuisine_type,
                 model.about_text, model.google_place_id, model.latitude, model.longitude, model.logo_url, model.banner_url,
@@ -187,6 +189,7 @@ def create_restaurant(body: dict | str = Body(...), authorization: str = Header(
                 model.owner_email, admin_token, model.theme,
                 model.deliveroo_url, model.justeat_url,
                 int(model.is_active), hours_json,
+                model.status, model.preview_password,
             ),
         )
         row = db.execute("SELECT * FROM restaurants WHERE id = ?", (cursor.lastrowid,)).fetchone()
@@ -249,6 +252,10 @@ def update_restaurant(restaurant_id: int, body: dict | str = Body(...), authoriz
             updates["opening_hours"] = json.dumps(model.opening_hours)
         if model.is_active is not None:
             updates["is_active"] = int(model.is_active)
+        if model.status is not None:
+            updates["status"] = model.status
+        if model.preview_password is not None:
+            updates["preview_password"] = model.preview_password or None
 
         if updates:
             set_clause = ", ".join(f"{k} = ?" for k in updates)

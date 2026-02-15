@@ -89,13 +89,10 @@ a:hover { opacity: 0.85; }
   gap: 14px;
 }
 
-.site-header .brand-mark {
-  font-family: "Fraunces", serif;
-  font-size: 18px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: var(--cream);
-  color: var(--ink);
+.site-header .brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
 }
 
 .site-header .brand-name {
@@ -321,7 +318,7 @@ label {
 
 /* Restaurant banner (compact header for restaurant pages) */
 .restaurant-banner {
-  padding: 18px 6vw 22px;
+  padding: 36px 6vw 44px;
   background: var(--header-bg);
   color: var(--white);
 }
@@ -463,6 +460,85 @@ label {
   color: rgba(0, 0, 0, 0.55);
   font-weight: 800;
   letter-spacing: 0.08em;
+}
+
+/* Admin table */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.admin-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light);
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+}
+
+.admin-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.admin-table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Dashboard stat cards */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.stat-card {
+  background: var(--white);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 20px 22px;
+  text-align: center;
+}
+
+.stat-card--highlight {
+  background: var(--burnt);
+  color: var(--white);
+  border-color: transparent;
+}
+
+.stat-label {
+  margin: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light);
+  font-weight: 600;
+}
+
+.stat-card--highlight .stat-label {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.stat-value {
+  margin: 6px 0 4px;
+  font-family: "Fraunces", serif;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.stat-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-light);
+}
+
+.stat-card--highlight .stat-sub {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 @media (max-width: 560px) {

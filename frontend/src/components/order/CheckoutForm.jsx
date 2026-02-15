@@ -28,6 +28,7 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
     customer_email: "",
     pickup_time: "",
     special_instructions: "",
+    sms_optin: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -50,6 +51,7 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
         customer_email: form.customer_email || null,
         pickup_time: form.pickup_time,
         special_instructions: form.special_instructions || null,
+        sms_optin: form.sms_optin,
         items: basket.items.map((i) => ({
           menu_item_id: i.id,
           quantity: i.quantity,
@@ -93,6 +95,26 @@ export default function CheckoutForm({ onSuccess, onCancel }) {
             placeholder="+44 7700 900000"
             required
           />
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginTop: "0.5rem",
+              fontSize: "0.85rem",
+              color: "var(--text-light)",
+              cursor: "pointer",
+              fontWeight: 400,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={form.sms_optin}
+              onChange={(e) => setForm({ ...form, sms_optin: e.target.checked })}
+              style={{ width: "auto", margin: 0 }}
+            />
+            Notify me by SMS when my order is updated
+          </label>
         </div>
 
         <div className="form-group">

@@ -27,7 +27,9 @@ export default function RestaurantHero({ restaurant }) {
             )}
             <div className="restaurant-banner-text">
               <h1>{restaurant.name}</h1>
-              <p className="restaurant-banner-sub">{restaurant.cuisine_type}</p>
+              {(restaurant.banner_text || restaurant.cuisine_type) && (
+                <p className="restaurant-banner-sub">{restaurant.banner_text || restaurant.cuisine_type}</p>
+              )}
             </div>
           </div>
 

@@ -27,9 +27,10 @@ function formatApiError(payload, fallback = "Request failed") {
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
+  const { headers: extraHeaders, ...rest } = options;
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...options.headers },
-    ...options,
+    ...rest,
+    headers: { "Content-Type": "application/json", ...extraHeaders },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -57,16 +58,25 @@ export function getRestaurants() {
   return request("/restaurants");
 }
 
-export function getRestaurant(slug) {
-  return request(`/restaurants/${slug}`);
+export function getRestaurant(slug, password = null) {
+  const q = password ? `?password=${encodeURIComponent(password)}` : "";
+  return request(`/restaurants/${slug}${q}`);
 }
 
-export function getMenu(slug) {
-  return request(`/restaurants/${slug}/menu`);
+export function getMenu(slug, password = null) {
+  const q = password ? `?password=${encodeURIComponent(password)}` : "";
+  return request(`/restaurants/${slug}/menu${q}`);
 }
 
-export function getInstagram(slug, limit = 8) {
-  return request(`/restaurants/${slug}/instagram?limit=${encodeURIComponent(limit)}`);
+export function getInstagram(slug, limit = 8, password = null) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (password) params.set("password", password);
+  return request(`/restaurants/${slug}/instagram?${params.toString()}`);
+}
+
+export function getGallery(slug, password = null) {
+  const q = password ? `?password=${encodeURIComponent(password)}` : "";
+  return request(`/restaurants/${slug}/gallery${q}`);
 }
 
 export function placeOrder(order) {
@@ -90,6 +100,14 @@ export function adminLogin(token) {
     method: "POST",
     body: JSON.stringify({ token }),
   });
+}
+
+export function getAdminStats(token) {
+  return request("/admin/stats", { headers: adminHeaders(token) });
+}
+
+export function getAdminCustomers(token) {
+  return request("/admin/customers", { headers: adminHeaders(token) });
 }
 
 export function getAdminOrders(token, status = null) {
@@ -136,6 +154,28 @@ export function getAdminCategories(token) {
   return request("/admin/categories", { headers: adminHeaders(token) });
 }
 
+export function getAdminRestaurant(token) {
+  return request("/admin/restaurant", { headers: adminHeaders(token) });
+}
+
+export function updateAdminRestaurant(token, data) {
+  return request("/admin/restaurant", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+    headers: adminHeaders(token),
+  });
+}
+
+/** Scrape Deliveroo/Just Eat and optionally import items into menu. */
+export function scrapeMenuWithImport(token, source, url = null, importToMenu = false) {
+  const query = importToMenu ? "?import_to_menu=true" : "";
+  return request(`/admin/menu/scrape${query}`, {
+    method: "POST",
+    body: JSON.stringify({ source, url }),
+    headers: adminHeaders(token),
+  });
+}
+
 export function addCategory(token, category) {
   return request("/admin/categories", {
     method: "POST",
@@ -148,6 +188,25 @@ export function scrapeMenu(token, source, url = null) {
   return request("/admin/menu/scrape", {
     method: "POST",
     body: JSON.stringify({ source, url }),
+    headers: adminHeaders(token),
+  });
+}
+
+export function getAdminGallery(token) {
+  return request("/admin/gallery", { headers: adminHeaders(token) });
+}
+
+export function addGalleryImage(token, imageUrl, caption = null) {
+  return request("/admin/gallery", {
+    method: "POST",
+    body: JSON.stringify({ image_url: imageUrl, caption }),
+    headers: adminHeaders(token),
+  });
+}
+
+export function deleteGalleryImage(token, imageId) {
+  return request(`/admin/gallery/${imageId}`, {
+    method: "DELETE",
     headers: adminHeaders(token),
   });
 }

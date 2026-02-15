@@ -1,20 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from ..database import get_db
 from ..models import MenuCategory, MenuItem
+from .restaurants import _require_accessible
 
 router = APIRouter(prefix="/restaurants/{slug}/menu", tags=["menu"])
 
 
 @router.get("", response_model=list[MenuCategory])
-def get_menu(slug: str):
+def get_menu(slug: str, password: str | None = Query(None)):
+    row = _require_accessible(slug, password)
+    rid = row["id"]
     with get_db() as db:
-        restaurant = db.execute(
-            "SELECT id FROM restaurants WHERE slug = ? AND is_active = 1", (slug,)
-        ).fetchone()
-        if not restaurant:
-            raise HTTPException(status_code=404, detail="Restaurant not found")
-
-        rid = restaurant["id"]
         categories = db.execute(
             "SELECT * FROM menu_categories WHERE restaurant_id = ? AND is_active = 1 ORDER BY display_order",
             (rid,),

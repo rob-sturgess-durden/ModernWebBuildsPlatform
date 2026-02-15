@@ -145,6 +145,18 @@ def init_db():
                 fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 json TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS gallery_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant_id INTEGER NOT NULL,
+                image_url TEXT NOT NULL,
+                caption TEXT,
+                display_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_gallery_images_restaurant ON gallery_images(restaurant_id);
         """)
 
         # Lightweight migrations for existing SQLite files.
@@ -161,6 +173,21 @@ def init_db():
             db.execute("ALTER TABLE restaurants ADD COLUMN about_text TEXT")
         if "google_place_id" not in restaurant_columns:
             db.execute("ALTER TABLE restaurants ADD COLUMN google_place_id TEXT")
+        if "banner_text" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN banner_text TEXT")
+        if "status" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN status TEXT DEFAULT 'live'")
+        if "preview_password" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN preview_password TEXT")
+        if "mobile_number" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN mobile_number TEXT")
+            # Migrate existing whatsapp_number data to mobile_number.
+            db.execute("UPDATE restaurants SET mobile_number = whatsapp_number WHERE whatsapp_number IS NOT NULL AND mobile_number IS NULL")
+        if "notification_channel" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN notification_channel TEXT DEFAULT 'whatsapp'")
+
+        if "sms_optin" not in order_columns:
+            db.execute("ALTER TABLE orders ADD COLUMN sms_optin INTEGER DEFAULT 0")
 
         # Indexes that depend on migrated columns must be created after migrations.
         db.execute("CREATE INDEX IF NOT EXISTS idx_restaurants_google_place_id ON restaurants(google_place_id)")

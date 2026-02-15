@@ -53,15 +53,16 @@ async def twilio_whatsapp_webhook(request: Request):
         body,
     )
 
-    # Handle opt-in template quick replies ("Yes"/"No").
+    # Handle opt-in / opt-out.  Any inbound message opts the user in,
+    # except explicit opt-out keywords.
     response_text = None
     choice = (button_text or button_payload or body).strip().lower()
-    if choice in {"yes", "y"}:
-        set_whatsapp_optin(from_number, True, source="twilio_quick_reply")
-        response_text = "Thanks. You are opted in for WhatsApp order updates."
-    elif choice in {"no", "n"}:
+    if choice in {"no", "n", "stop", "unsubscribe", "opt out", "optout"}:
         set_whatsapp_optin(from_number, False, source="twilio_quick_reply")
-        response_text = "No problem. You will not receive WhatsApp order updates."
+        response_text = "No problem. You will not receive WhatsApp order updates. Send any message to opt back in."
+    elif choice:
+        set_whatsapp_optin(from_number, True, source="twilio_quick_reply")
+        response_text = "Thanks! You'll now receive order updates via WhatsApp. Reply STOP to opt out."
 
     with get_db() as db:
         db.execute(

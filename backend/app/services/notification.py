@@ -8,6 +8,24 @@ from ..database import get_db
 
 logger = logging.getLogger(__name__)
 
+
+def _format_pickup_time(raw: str | None) -> str:
+    """Convert ISO pickup time like '2026-02-15T18:30:00.000Z' to 'Sat 15 Feb, 6:30 PM'."""
+    if not raw:
+        return ""
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        # Convert to UK time (UTC+0 in winter, UTC+1 in summer)
+        try:
+            from zoneinfo import ZoneInfo
+            dt = dt.astimezone(ZoneInfo("Europe/London"))
+        except Exception:
+            pass
+        return dt.strftime("%a %d %b, %-I:%M %p")
+    except Exception:
+        return raw
+
 def _normalize_whatsapp_number(raw: str) -> str:
     n = (raw or "").strip()
     if n.startswith("whatsapp:"):
@@ -128,6 +146,60 @@ def send_whatsapp(to_number: str, message: str) -> bool:
             meta={"error_code": code, "error": str(e)[:500]},
         )
         logger.error("Failed to send WhatsApp to %s (code=%s): %s", to_number, code, e)
+        return False
+
+
+def send_sms(to_number: str, message: str) -> bool:
+    """Send an SMS via Twilio. Returns True on success."""
+    if not config.SMS_ENABLED:
+        return False
+    if not config.TWILIO_ACCOUNT_SID or not config.TWILIO_AUTH_TOKEN:
+        logger.warning("Twilio credentials not configured, skipping SMS")
+        return False
+    if not config.TWILIO_SMS_FROM:
+        logger.warning("TWILIO_SMS_FROM not configured, skipping SMS")
+        return False
+    try:
+        from twilio.rest import Client
+        client = Client(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN)
+        msg = client.messages.create(
+            body=message,
+            from_=config.TWILIO_SMS_FROM,
+            to=to_number,
+        )
+        _store_message(
+            provider="twilio",
+            channel="sms",
+            direction="outbound",
+            from_addr=config.TWILIO_SMS_FROM,
+            to_addr=to_number,
+            subject=None,
+            body_text=message,
+            body_html=None,
+            order_number=None,
+            action=None,
+            status="ok",
+            meta={"sid": getattr(msg, "sid", None)},
+        )
+        logger.info("SMS queued to %s (sid=%s)", to_number, getattr(msg, "sid", None))
+        return True
+    except Exception as e:
+        code = getattr(e, "code", None)
+        _store_message(
+            provider="twilio",
+            channel="sms",
+            direction="outbound",
+            from_addr=config.TWILIO_SMS_FROM,
+            to_addr=to_number,
+            subject=None,
+            body_text=message,
+            body_html=None,
+            order_number=None,
+            action=None,
+            status="error",
+            meta={"error_code": code, "error": str(e)[:500]},
+        )
+        logger.error("Failed to send SMS to %s (code=%s): %s", to_number, code, e)
         return False
 
 
@@ -377,7 +449,7 @@ def notify_new_order(order: dict, restaurant: dict):
         f"New order {order['order_number']}!\n\n"
         f"{items_text}\n\n"
         f"Subtotal: £{order['subtotal']:.2f}\n"
-        f"Pickup: {order['pickup_time']}\n"
+        f"Pickup: {_format_pickup_time(order['pickup_time'])}\n"
         f"Customer: {order['customer_name']} ({order['customer_phone']})\n"
     )
     if order.get("special_instructions"):
@@ -430,7 +502,7 @@ def notify_customer_received(order: dict, restaurant_name: str):
     subject = f"Order received: {order['order_number']} · {restaurant_name}"
     body = (
         f"We've received your order {order['order_number']} at {restaurant_name}.\n\n"
-        f"Pickup time: {order.get('pickup_time')}\n"
+        f"Pickup time: {_format_pickup_time(order.get('pickup_time'))}\n"
         f"Subtotal: £{order.get('subtotal', 0):.2f}\n\n"
         f"Track your order: {config.PUBLIC_BASE_URL}/order/{order['order_number']}\n"
         "You'll receive updates when the restaurant confirms and prepares your order.\n"
@@ -451,6 +523,10 @@ def notify_customer_received(order: dict, restaurant_name: str):
     else:
         send_whatsapp_optin_request(phone)
 
+    # SMS opt-in: send confirmation if customer ticked the box.
+    if order.get("sms_optin") and phone:
+        send_sms(phone, body)
+
 
 def notify_customer_status(order: dict, restaurant_name: str):
     """Notify customer of an order status change."""
@@ -458,7 +534,7 @@ def notify_customer_status(order: dict, restaurant_name: str):
     messages = {
         "confirmed": (
             f"Your order {order['order_number']} at {restaurant_name} is confirmed!\n"
-            f"Pickup at: {order['pickup_time']}\n"
+            f"Pickup at: {_format_pickup_time(order['pickup_time'])}\n"
             f"Pay at the restaurant. See you soon!"
         ),
         "ready": (
@@ -479,6 +555,10 @@ def notify_customer_status(order: dict, restaurant_name: str):
         send_whatsapp(order["customer_phone"], message)
     else:
         send_whatsapp_optin_request(order["customer_phone"])
+
+    # SMS: check the sms_optin flag stored on the order.
+    if order.get("sms_optin") and order.get("customer_phone"):
+        send_sms(order["customer_phone"], message)
 
     if order.get("customer_email"):
         send_email(

@@ -5,6 +5,7 @@ from ..database import get_db
 from ..models import (
     AdminLogin, OrderResponse, OrderStatusUpdate,
     MenuItemCreate, MenuItemUpdate, MenuItem, CategoryCreate, ScrapeRequest,
+    RestaurantUpdate, CustomerSummary,
 )
 from ..services.order_service import advance_order_status
 from ..services.notification import notify_customer_status
@@ -36,6 +37,150 @@ def admin_login(body: AdminLogin):
     if not row:
         raise HTTPException(status_code=401, detail="Invalid token")
     return {"restaurant_id": row["id"], "name": row["name"], "slug": row["slug"]}
+
+
+# --- Dashboard stats ---
+
+@router.get("/stats")
+def get_admin_stats(authorization: str = Header(...)):
+    restaurant = _get_restaurant_from_token(authorization)
+    rid = restaurant["id"]
+    with get_db() as db:
+        # All-time totals
+        totals = db.execute(
+            "SELECT COUNT(*) as total_orders, COALESCE(SUM(subtotal), 0) as total_revenue "
+            "FROM orders WHERE restaurant_id = ?",
+            (rid,),
+        ).fetchone()
+
+        # This week (Monday to now)
+        week = db.execute(
+            "SELECT COUNT(*) as orders, COALESCE(SUM(subtotal), 0) as revenue "
+            "FROM orders WHERE restaurant_id = ? AND created_at >= date('now', 'weekday 1', '-7 days')",
+            (rid,),
+        ).fetchone()
+
+        # Today
+        today = db.execute(
+            "SELECT COUNT(*) as orders, COALESCE(SUM(subtotal), 0) as revenue "
+            "FROM orders WHERE restaurant_id = ? AND date(created_at) = date('now')",
+            (rid,),
+        ).fetchone()
+
+        # Pending orders count
+        pending = db.execute(
+            "SELECT COUNT(*) as c FROM orders WHERE restaurant_id = ? AND status = 'pending'",
+            (rid,),
+        ).fetchone()["c"]
+
+        # Customer count
+        customer_count = db.execute(
+            "SELECT COUNT(DISTINCT LOWER(TRIM(customer_name)) || '|' || LOWER(TRIM(COALESCE(customer_email, '')))) as c "
+            "FROM orders WHERE restaurant_id = ?",
+            (rid,),
+        ).fetchone()["c"]
+
+    total_revenue = totals["total_revenue"]
+    week_revenue = week["revenue"]
+    commission_rate = 0.10
+
+    return {
+        "total_orders": totals["total_orders"],
+        "total_revenue": round(total_revenue, 2),
+        "total_commission": round(total_revenue * commission_rate, 2),
+        "week_orders": week["orders"],
+        "week_revenue": round(week_revenue, 2),
+        "week_commission": round(week_revenue * commission_rate, 2),
+        "today_orders": today["orders"],
+        "today_revenue": round(today["revenue"], 2),
+        "pending_orders": pending,
+        "customer_count": customer_count,
+    }
+
+
+# --- Restaurant settings (own profile) ---
+
+@router.get("/restaurant")
+def get_admin_restaurant(authorization: str = Header(...)):
+    """Return the current restaurant's details for editing (no admin_token)."""
+    restaurant = _get_restaurant_from_token(authorization)
+    with get_db() as db:
+        row = db.execute(
+            "SELECT id, name, slug, address, cuisine_type, about_text, banner_text, latitude, longitude, "
+            "logo_url, banner_url, instagram_handle, facebook_handle, phone, whatsapp_number, "
+            "owner_email, theme, deliveroo_url, justeat_url, is_active, opening_hours, "
+            "status, preview_password "
+            "FROM restaurants WHERE id = ?",
+            (restaurant["id"],),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+    out = dict(row)
+    if out.get("opening_hours"):
+        try:
+            out["opening_hours"] = json.loads(out["opening_hours"])
+        except (TypeError, json.JSONDecodeError):
+            out["opening_hours"] = None
+    return out
+
+
+@router.patch("/restaurant")
+def update_admin_restaurant(body: RestaurantUpdate, authorization: str = Header(...)):
+    """Update the current restaurant's details (allowed fields only)."""
+    restaurant = _get_restaurant_from_token(authorization)
+    updates = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.address is not None:
+        updates["address"] = body.address
+    if body.cuisine_type is not None:
+        updates["cuisine_type"] = body.cuisine_type
+    if body.about_text is not None:
+        updates["about_text"] = body.about_text
+    if body.latitude is not None:
+        updates["latitude"] = body.latitude
+    if body.longitude is not None:
+        updates["longitude"] = body.longitude
+    if body.logo_url is not None:
+        updates["logo_url"] = body.logo_url
+    if body.banner_url is not None:
+        updates["banner_url"] = body.banner_url
+    if body.instagram_handle is not None:
+        updates["instagram_handle"] = body.instagram_handle
+    if body.facebook_handle is not None:
+        updates["facebook_handle"] = body.facebook_handle
+    if body.phone is not None:
+        updates["phone"] = body.phone
+    if body.whatsapp_number is not None:
+        updates["whatsapp_number"] = body.whatsapp_number
+    if body.owner_email is not None:
+        updates["owner_email"] = body.owner_email
+    if body.theme is not None:
+        updates["theme"] = body.theme
+    if body.deliveroo_url is not None:
+        updates["deliveroo_url"] = body.deliveroo_url
+    if body.justeat_url is not None:
+        updates["justeat_url"] = body.justeat_url
+    if body.is_active is not None:
+        updates["is_active"] = int(body.is_active)
+    if body.opening_hours is not None:
+        updates["opening_hours"] = json.dumps(body.opening_hours)
+    if body.google_place_id is not None:
+        updates["google_place_id"] = body.google_place_id
+    if body.banner_text is not None:
+        updates["banner_text"] = body.banner_text
+    if body.preview_password is not None:
+        updates["preview_password"] = body.preview_password or None
+    if not updates:
+        return get_admin_restaurant(authorization)
+    set_parts = [f"{k} = ?" for k in updates]
+    values = list(updates.values()) + [restaurant["id"]]
+    with get_db() as db:
+        db.execute(
+            f"UPDATE restaurants SET {', '.join(set_parts)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            values,
+        )
+    return get_admin_restaurant(authorization)
 
 
 # --- Orders ---
@@ -80,6 +225,20 @@ def list_orders(status: str | None = None, authorization: str = Header(...)):
                 created_at=o["created_at"] or "",
             ))
     return result
+
+
+@router.get("/customers", response_model=list[CustomerSummary])
+def list_customers(authorization: str = Header(...)):
+    restaurant = _get_restaurant_from_token(authorization)
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT customer_name, customer_email, COUNT(*) as order_count, MAX(created_at) as last_order_at "
+            "FROM orders WHERE restaurant_id = ? "
+            "GROUP BY LOWER(TRIM(customer_name)), LOWER(TRIM(customer_email)) "
+            "ORDER BY last_order_at DESC",
+            (restaurant["id"],),
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 
 @router.patch("/orders/{order_id}/status", response_model=OrderResponse)
@@ -345,3 +504,48 @@ def scrape_menu(
         "updated": updated,
         "skipped": skipped,
     }
+
+
+# --- Gallery ---
+
+@router.get("/gallery")
+def list_gallery(authorization: str = Header(...)):
+    restaurant = _get_restaurant_from_token(authorization)
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT id, image_url, caption, display_order FROM gallery_images "
+            "WHERE restaurant_id = ? ORDER BY display_order, id",
+            (restaurant["id"],),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/gallery", status_code=201)
+def add_gallery_image(body: dict, authorization: str = Header(...)):
+    restaurant = _get_restaurant_from_token(authorization)
+    image_url = (body.get("image_url") or "").strip()
+    if not image_url:
+        raise HTTPException(status_code=400, detail="image_url is required")
+    caption = (body.get("caption") or "").strip() or None
+    with get_db() as db:
+        max_order = db.execute(
+            "SELECT COALESCE(MAX(display_order), -1) as m FROM gallery_images WHERE restaurant_id = ?",
+            (restaurant["id"],),
+        ).fetchone()["m"]
+        cursor = db.execute(
+            "INSERT INTO gallery_images (restaurant_id, image_url, caption, display_order) VALUES (?, ?, ?, ?)",
+            (restaurant["id"], image_url, caption, max_order + 1),
+        )
+    return {"id": cursor.lastrowid, "image_url": image_url, "caption": caption, "display_order": max_order + 1}
+
+
+@router.delete("/gallery/{image_id}", status_code=204)
+def delete_gallery_image(image_id: int, authorization: str = Header(...)):
+    restaurant = _get_restaurant_from_token(authorization)
+    with get_db() as db:
+        deleted = db.execute(
+            "DELETE FROM gallery_images WHERE id = ? AND restaurant_id = ?",
+            (image_id, restaurant["id"]),
+        ).rowcount
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Gallery image not found")

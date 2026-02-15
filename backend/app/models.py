@@ -19,6 +19,7 @@ class RestaurantDetail(RestaurantSummary):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     about_text: Optional[str] = None
+    banner_text: Optional[str] = None
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
@@ -26,6 +27,7 @@ class RestaurantDetail(RestaurantSummary):
 
     @classmethod
     def from_row(cls, row):
+        keys = row.keys()
         hours = None
         if row["opening_hours"]:
             try:
@@ -40,15 +42,22 @@ class RestaurantDetail(RestaurantSummary):
             cuisine_type=row["cuisine_type"],
             latitude=row["latitude"],
             longitude=row["longitude"],
-            logo_url=row["logo_url"] if "logo_url" in row.keys() else None,
-            banner_url=row["banner_url"] if "banner_url" in row.keys() else None,
-            about_text=row["about_text"] if "about_text" in row.keys() else None,
+            logo_url=row["logo_url"] if "logo_url" in keys else None,
+            banner_url=row["banner_url"] if "banner_url" in keys else None,
+            about_text=row["about_text"] if "about_text" in keys else None,
+            banner_text=row["banner_text"] if "banner_text" in keys else None,
             instagram_handle=row["instagram_handle"],
             facebook_handle=row["facebook_handle"],
             phone=row["phone"],
             opening_hours=hours,
             theme=row["theme"],
         )
+
+class GalleryImage(BaseModel):
+    id: int
+    image_url: str
+    caption: Optional[str] = None
+    display_order: int = 0
 
 class InstagramPost(BaseModel):
     id: str
@@ -58,6 +67,13 @@ class InstagramPost(BaseModel):
     caption: Optional[str] = None
     timestamp: Optional[str] = None
     is_video: bool = False
+
+
+class CustomerSummary(BaseModel):
+    customer_name: str
+    customer_email: Optional[str] = None
+    order_count: int
+    last_order_at: str
 
 
 # --- Menu ---
@@ -133,6 +149,7 @@ class OrderCreate(BaseModel):
     customer_email: Optional[str] = None
     pickup_time: str
     special_instructions: Optional[str] = None
+    sms_optin: bool = False
     items: list[OrderItemCreate]
 
 class OrderItemResponse(BaseModel):
@@ -156,6 +173,9 @@ class OrderResponse(BaseModel):
     status: str
     items: list[OrderItemResponse] = []
     created_at: str
+    sms_optin: bool = False
+    notification_whatsapp: Optional[str] = None
+    notification_sms: bool = False
 
 class OrderStatusUpdate(BaseModel):
     status: str
@@ -185,13 +205,16 @@ class RestaurantCreate(BaseModel):
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
-    whatsapp_number: Optional[str] = None
+    mobile_number: Optional[str] = None
+    notification_channel: str = "whatsapp"
     owner_email: Optional[str] = None
     theme: str = "modern"
     deliveroo_url: Optional[str] = None
     justeat_url: Optional[str] = None
     opening_hours: Optional[dict] = None
     is_active: bool = True
+    status: str = "pending"
+    preview_password: Optional[str] = None
     google_place_id: Optional[str] = None
 
 class RestaurantUpdate(BaseModel):
@@ -199,6 +222,7 @@ class RestaurantUpdate(BaseModel):
     address: Optional[str] = None
     cuisine_type: Optional[str] = None
     about_text: Optional[str] = None
+    banner_text: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     logo_url: Optional[str] = None
@@ -206,13 +230,16 @@ class RestaurantUpdate(BaseModel):
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
-    whatsapp_number: Optional[str] = None
+    mobile_number: Optional[str] = None
+    notification_channel: Optional[str] = None
     owner_email: Optional[str] = None
     theme: Optional[str] = None
     deliveroo_url: Optional[str] = None
     justeat_url: Optional[str] = None
     opening_hours: Optional[dict] = None
     is_active: Optional[bool] = None
+    status: Optional[str] = None
+    preview_password: Optional[str] = None
     google_place_id: Optional[str] = None
 
 class RestaurantAdmin(BaseModel):
@@ -230,13 +257,16 @@ class RestaurantAdmin(BaseModel):
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
-    whatsapp_number: Optional[str] = None
+    mobile_number: Optional[str] = None
+    notification_channel: str = "whatsapp"
     owner_email: Optional[str] = None
     admin_token: str
     theme: str
     deliveroo_url: Optional[str] = None
     justeat_url: Optional[str] = None
     is_active: bool
+    status: str = "live"
+    preview_password: Optional[str] = None
     opening_hours: Optional[dict] = None
     created_at: Optional[str] = None
     order_count: int = 0

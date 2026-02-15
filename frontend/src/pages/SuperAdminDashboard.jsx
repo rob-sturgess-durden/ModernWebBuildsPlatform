@@ -215,6 +215,8 @@ export default function SuperAdminDashboard() {
       deliveroo_url: restaurant.deliveroo_url || "",
       justeat_url: restaurant.justeat_url || "",
       is_active: restaurant.is_active,
+      status: restaurant.status || "live",
+      preview_password: restaurant.preview_password || "",
     });
   };
 
@@ -577,6 +579,24 @@ export default function SuperAdminDashboard() {
                   </button>
                 </div>
               </div>
+              <div className="form-group">
+                <label>Status</label>
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                  <option value="pending">Pending (testing, password protected)</option>
+                  <option value="live">Live (public)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Preview password</label>
+                <input
+                  value={form.preview_password}
+                  onChange={(e) => setForm({ ...form, preview_password: e.target.value })}
+                  placeholder="Password for pending sites"
+                />
+                <p style={{ fontSize: "0.8rem", color: "var(--text-light)", marginTop: 4 }}>
+                  Required when status is Pending. Testers need this to access the site.
+                </p>
+              </div>
               <div className="form-group" style={{ display: "flex", alignItems: "center", gap: "0.5rem", paddingTop: "1.5rem" }}>
                 <input
                   type="checkbox"
@@ -611,9 +631,12 @@ export default function SuperAdminDashboard() {
                 <p style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>{r.address}</p>
               </div>
               <div style={{ display: "flex", gap: "0.3rem", flexShrink: 0 }}>
-                <span className={`badge ${r.is_active ? "status-confirmed" : "status-cancelled"}`}>
-                  {r.is_active ? "active" : "inactive"}
+                <span className={`badge ${(r.status || "live") === "live" ? "status-confirmed" : "status-pending"}`}>
+                  {(r.status || "live") === "live" ? "Live" : "Pending"}
                 </span>
+                {!r.is_active && (
+                  <span className="badge status-cancelled">inactive</span>
+                )}
                 <span className="badge" style={{ background: "#e2e8f0", color: "#475569" }}>{r.theme}</span>
               </div>
             </div>
@@ -697,5 +720,7 @@ function emptyForm() {
     deliveroo_url: "",
     justeat_url: "",
     is_active: true,
+    status: "pending",
+    preview_password: "",
   };
 }

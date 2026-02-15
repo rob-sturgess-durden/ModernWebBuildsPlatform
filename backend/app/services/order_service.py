@@ -60,13 +60,13 @@ def create_order(data: dict) -> dict:
         # Insert order
         cursor = db.execute(
             """INSERT INTO orders (restaurant_id, order_number, customer_name, customer_phone,
-               customer_email, pickup_time, special_instructions, subtotal, status, owner_action_token)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+               customer_email, pickup_time, special_instructions, subtotal, status, owner_action_token, sms_optin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
             (
                 data["restaurant_id"], order_number, data["customer_name"],
                 data["customer_phone"], data.get("customer_email"),
                 data["pickup_time"], data.get("special_instructions"), subtotal,
-                owner_action_token,
+                owner_action_token, 1 if data.get("sms_optin") else 0,
             ),
         )
         order_id = cursor.lastrowid
@@ -97,6 +97,7 @@ def create_order(data: dict) -> dict:
         "special_instructions": data.get("special_instructions"),
         "subtotal": subtotal,
         "status": "pending",
+        "sms_optin": bool(data.get("sms_optin")),
         "owner_action_token": owner_action_token,
         "items": [
             {
@@ -154,6 +155,7 @@ def advance_order_status(order_id: int, new_status: str, restaurant_id: int) -> 
         "special_instructions": updated["special_instructions"],
         "subtotal": updated["subtotal"],
         "status": updated["status"],
+        "sms_optin": bool(updated["sms_optin"]) if "sms_optin" in updated.keys() else False,
         "items": [
             {
                 "id": i["id"],

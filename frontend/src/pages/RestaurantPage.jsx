@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getRestaurant, getMenu, getInstagram } from "../api/client";
+import { getRestaurant, getMenu, getInstagram, getGallery } from "../api/client";
 import { useBasket } from "../context/BasketContext";
 import RestaurantHero from "../components/restaurant/RestaurantHero";
 import MapWidget from "../components/restaurant/MapWidget";
@@ -17,23 +17,89 @@ export default function RestaurantPage() {
   const [restaurant, setRestaurant] = useState(null);
   const [menu, setMenu] = useState([]);
   const [instagram, setInstagram] = useState([]);
+  const [gallery, setGallery] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [checkout, setCheckout] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [passwordError, setPasswordError] = useState(false);
 
-  useEffect(() => {
+  const loadRestaurant = (pw = null) => {
     setLoading(true);
-    Promise.all([getRestaurant(slug), getMenu(slug), getInstagram(slug, 8).catch(() => [])])
-      .then(([r, m, ig]) => {
+    setError(null);
+    const password = pw || sessionStorage.getItem(`preview_pw_${slug}`);
+    Promise.all([
+      getRestaurant(slug, password),
+      getMenu(slug, password),
+      getInstagram(slug, 8, password).catch(() => []),
+      getGallery(slug, password).catch(() => []),
+    ])
+      .then(([r, m, ig, gal]) => {
         setRestaurant(r);
         setMenu(m);
         setInstagram(Array.isArray(ig) ? ig : []);
+        setGallery(Array.isArray(gal) ? gal : []);
+        setNeedsPassword(false);
+        if (password) sessionStorage.setItem(`preview_pw_${slug}`, password);
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        if (e.message === "password_required") {
+          setNeedsPassword(true);
+          setPasswordError(!!pw);
+        } else {
+          setError(e.message);
+        }
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadRestaurant();
   }, [slug]);
 
+  const handlePasswordSubmit = (e) => {
+    e.preventDefault();
+    if (!passwordInput.trim()) return;
+    loadRestaurant(passwordInput.trim());
+  };
+
   if (loading) return <div className="loading">Loading...</div>;
+
+  if (needsPassword) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div className="card" style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+          <div style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>
+            <i className="fas fa-lock" />
+          </div>
+          <h2 style={{ fontWeight: 700, marginBottom: "0.5rem" }}>Preview mode</h2>
+          <p style={{ color: "var(--text-light)", marginBottom: "1.5rem" }}>
+            This restaurant is currently in testing. Enter the preview password to continue.
+          </p>
+          <form onSubmit={handlePasswordSubmit}>
+            <div className="form-group">
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(false); }}
+                placeholder="Enter password"
+                autoFocus
+                style={passwordError ? { borderColor: "#e53e3e" } : {}}
+              />
+              {passwordError && (
+                <p style={{ color: "#e53e3e", fontSize: "0.85rem", marginTop: 6 }}>Incorrect password</p>
+              )}
+            </div>
+            <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>
+              Enter
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   if (error) return <div className="error">{error}</div>;
   if (!restaurant) return <div className="error">Restaurant not found</div>;
 
@@ -81,6 +147,31 @@ export default function RestaurantPage() {
         </div>
       </section>
 
+      {instagram.length > 0 ? (
+        <InstagramFeed posts={instagram} handle={restaurant.instagram_handle} />
+      ) : gallery.length > 0 ? (
+        <section className="section" style={{ padding: "48px 6vw 72px" }}>
+          <div className="container">
+            <div className="section-title" style={{ marginBottom: 18, textAlign: "left" }}>
+              <p className="eyebrow">Gallery</p>
+              <h2 style={{ fontFamily: '"Fraunces", serif', margin: "10px 0 0" }}>Photos</h2>
+            </div>
+            <div className="ig-grid">
+              {gallery.map((img) => (
+                <div key={img.id} className="ig-card" style={{ cursor: "default" }}>
+                  <img loading="lazy" src={img.image_url} alt={img.caption || "Gallery photo"} />
+                  {img.caption && (
+                    <span className="ig-overlay">
+                      <span className="ig-pill">{img.caption}</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       <section id="menu" className="menu" style={{ padding: "72px 6vw" }}>
         <div className="container">
           <div className="restaurant-layout">
@@ -120,7 +211,6 @@ export default function RestaurantPage() {
         </div>
       </section>
 
-      <InstagramFeed posts={instagram} handle={restaurant.instagram_handle} />
     </div>
   );
 }

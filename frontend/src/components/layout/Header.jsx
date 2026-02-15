@@ -8,10 +8,10 @@ export default function Header() {
     <header className="site-header">
       <div className="container">
         <Link to="/restaurants" className="brand">
-          <span className="brand-mark">HE</span>
+          <img src="/forkit-logo.svg" alt="ForkIt" className="brand-logo" />
           <div>
-            <p className="brand-name">Hackney Eats</p>
-            <p className="brand-tag">Local Restaurants • Click & Collect</p>
+            <p className="brand-name">ForkIt</p>
+            <p className="brand-tag">Local Restaurants • Click &amp; Collect</p>
           </div>
         </Link>
         {totalItems > 0 && basket.restaurantSlug && (

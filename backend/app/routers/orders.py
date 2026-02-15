@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from ..database import get_db
 from ..models import OrderCreate, OrderResponse
 from ..services.order_service import create_order, advance_order_status
+from .. import config
 from ..services.notification import (
     notify_new_order,
     notify_customer_status,
@@ -56,6 +57,8 @@ def get_order_status(order_number: str):
             "SELECT name FROM restaurants WHERE id = ?", (order["restaurant_id"],)
         ).fetchone()
 
+    wa_from = config.TWILIO_WHATSAPP_FROM if config.WHATSAPP_ENABLED else None
+
     return OrderResponse(
         id=order["id"],
         order_number=order["order_number"],
@@ -79,6 +82,9 @@ def get_order_status(order_number: str):
             for i in items
         ],
         created_at=order["created_at"] or "",
+        sms_optin=bool(order["sms_optin"]) if "sms_optin" in order.keys() else False,
+        notification_whatsapp=wa_from,
+        notification_sms=config.SMS_ENABLED,
     )
 
 

@@ -19,9 +19,13 @@ export default function App() {
     return <LandingPage />;
   }
 
+  // Restaurant pages have their own hero banner, so hide the site header
+  const isRestaurantPage = /^\/[^/]+$/.test(location.pathname)
+    && !["/restaurants", "/admin", "/superadmin"].includes(location.pathname);
+
   return (
     <div className="eats-page" style={{ display: "flex", flexDirection: "column" }}>
-      <Header />
+      {!isRestaurantPage && <Header />}
       <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/restaurants" element={<HomePage />} />
