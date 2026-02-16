@@ -102,7 +102,7 @@ ssh -i "$PEM_PATH" "$REMOTE_USER@$REMOTE_HOST" "
 
 echo "==> Health check"
 for i in {1..15}; do
-  if curl -fsS "https://modernwebbuilds.co.uk/api/health" >/tmp/modernwebbuilds-health.out; then
+  if curl -fsS "https://forkitt.com/api/health" >/tmp/modernwebbuilds-health.out; then
     break
   fi
   sleep 1
@@ -110,4 +110,3 @@ done
 
 echo "Health: $(cat /tmp/modernwebbuilds-health.out)"
 echo "Deploy complete."
-

@@ -80,6 +80,7 @@ def _resize_in_place(path: Path, kind: str) -> None:
         "menu": (1200, 1200),
         "logo": (512, 512),
         "banner": (2400, 1350),
+        "gallery": (2000, 2000),
     }
     max_w, max_h = limits.get(kind, (1600, 1600))
 
@@ -116,7 +117,7 @@ def _resize_in_place(path: Path, kind: str) -> None:
 @router.post("/image")
 async def upload_image(
     file: UploadFile = File(...),
-    kind: str = Form("menu"),  # menu|logo|banner
+    kind: str = Form("menu"),  # menu|logo|banner|gallery
     restaurant_id: int | None = Form(None),
     authorization: str | None = Header(None),
 ):
@@ -132,8 +133,8 @@ async def upload_image(
         raise HTTPException(status_code=400, detail="restaurant_id is required for super admin uploads")
 
     kind = (kind or "menu").strip().lower()
-    if kind not in {"menu", "logo", "banner"}:
-        raise HTTPException(status_code=400, detail="kind must be one of: menu, logo, banner")
+    if kind not in {"menu", "logo", "banner", "gallery"}:
+        raise HTTPException(status_code=400, detail="kind must be one of: menu, logo, banner, gallery")
 
     ctype = (file.content_type or "").lower()
     ext = ALLOWED_CONTENT_TYPES.get(ctype)

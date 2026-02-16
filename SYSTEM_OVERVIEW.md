@@ -1,4 +1,4 @@
-# ModernWebBuilds System Overview
+# ForkIt System Overview
 
 ## Purpose
 This project is a multi-restaurant click-and-collect platform:
@@ -52,9 +52,9 @@ This project is a multi-restaurant click-and-collect platform:
 
 ## Production Deployment Topology
 - Host: `ubuntu@35.176.77.68`
-- Domain: `https://modernwebbuilds.co.uk`
+- Domain: `https://forkitt.com`
 - Nginx:
-  - Static frontend root: `/var/www/modernwebbuilds.co.uk`
+  - Static frontend root (legacy path on disk): `/var/www/modernwebbuilds.co.uk`
   - Reverse proxy `/api/*` -> backend localhost port
 - Backend:
   - App path: `/opt/modernwebdevelopment/backend`

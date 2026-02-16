@@ -82,6 +82,7 @@ def init_db():
                 restaurant_id INTEGER NOT NULL,
                 order_number TEXT NOT NULL UNIQUE,
                 owner_action_token TEXT,
+                owner_note TEXT,
                 customer_name TEXT NOT NULL,
                 customer_phone TEXT NOT NULL,
                 customer_email TEXT,
@@ -91,6 +92,7 @@ def init_db():
                 status TEXT NOT NULL DEFAULT 'pending',
                 status_changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
             );
 
@@ -157,12 +159,66 @@ def init_db():
             );
 
             CREATE INDEX IF NOT EXISTS idx_gallery_images_restaurant ON gallery_images(restaurant_id);
+
+            CREATE TABLE IF NOT EXISTS marketing_signups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant_id INTEGER,
+                name TEXT,
+                email TEXT,
+                phone TEXT,
+                source TEXT DEFAULT 'restaurant_page',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_marketing_signups_restaurant ON marketing_signups(restaurant_id);
+            CREATE INDEX IF NOT EXISTS idx_marketing_signups_created ON marketing_signups(created_at);
+
+            CREATE TABLE IF NOT EXISTS magic_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant_id INTEGER NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                used INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_magic_links_token ON magic_links(token);
+
+            CREATE TABLE IF NOT EXISTS verified_customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone TEXT,
+                email TEXT,
+                verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_verified_phone ON verified_customers(phone);
+            CREATE INDEX IF NOT EXISTS idx_verified_email ON verified_customers(email);
+
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phone TEXT,
+                email TEXT,
+                code TEXT NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                used INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
 
         # Lightweight migrations for existing SQLite files.
         order_columns = [r["name"] for r in db.execute("PRAGMA table_info(orders)").fetchall()]
         if "owner_action_token" not in order_columns:
             db.execute("ALTER TABLE orders ADD COLUMN owner_action_token TEXT")
+        if "owner_note" not in order_columns:
+            db.execute("ALTER TABLE orders ADD COLUMN owner_note TEXT")
+        if "updated_at" not in order_columns:
+            # SQLite doesn't allow adding a column with a non-constant default (like CURRENT_TIMESTAMP).
+            db.execute("ALTER TABLE orders ADD COLUMN updated_at TIMESTAMP")
+            db.execute(
+                "UPDATE orders SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)"
+            )
 
         restaurant_columns = [r["name"] for r in db.execute("PRAGMA table_info(restaurants)").fetchall()]
         if "logo_url" not in restaurant_columns:

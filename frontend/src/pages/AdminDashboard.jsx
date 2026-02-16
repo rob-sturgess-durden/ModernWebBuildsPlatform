@@ -22,6 +22,114 @@ import {
 
 const STATUS_TABS = ["all", "pending", "confirmed", "ready", "collected", "cancelled"];
 
+const OPENING_HOURS_DAYS = [
+  { key: "mon", label: "Mon" },
+  { key: "tue", label: "Tue" },
+  { key: "wed", label: "Wed" },
+  { key: "thu", label: "Thu" },
+  { key: "fri", label: "Fri" },
+  { key: "sat", label: "Sat" },
+  { key: "sun", label: "Sun" },
+];
+
+function _pad2(n) {
+  const s = String(n ?? "");
+  return s.length === 1 ? `0${s}` : s;
+}
+
+function _coerceTime(v) {
+  // Accept "9", "09", "9:30", "09:30", "9.5" (-> 09:30), "09:30:00" (-> 09:30)
+  if (v == null) return "";
+  const raw = String(v).trim();
+  if (!raw) return "";
+
+  const m = raw.match(/^(\d{1,2})(?::(\d{1,2}))?(?::\d{1,2})?$/);
+  if (m) {
+    const hh = Math.max(0, Math.min(23, parseInt(m[1], 10)));
+    const mm = m[2] != null ? Math.max(0, Math.min(59, parseInt(m[2], 10))) : 0;
+    return `${_pad2(hh)}:${_pad2(mm)}`;
+  }
+
+  // "9.5" -> 09:30
+  const f = Number(raw);
+  if (Number.isFinite(f)) {
+    const hh = Math.max(0, Math.min(23, Math.floor(f)));
+    const mm = Math.max(0, Math.min(59, Math.round((f - Math.floor(f)) * 60)));
+    return `${_pad2(hh)}:${_pad2(mm)}`;
+  }
+
+  return "";
+}
+
+function _parseRangeString(s) {
+  // "09:00-17:00", "9-17", "9:30 - 17", "09:00–17:00"
+  const raw = String(s || "").trim();
+  if (!raw) return null;
+  const parts = raw.split(/[-–—]/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const open = _coerceTime(parts[0]);
+  const close = _coerceTime(parts[1]);
+  if (!open || !close) return null;
+  return { open, close };
+}
+
+function normalizeOpeningHours(input) {
+  const out = Object.fromEntries(OPENING_HOURS_DAYS.map((d) => [d.key, []]));
+  if (!input || typeof input !== "object") return out;
+
+  const alias = {
+    monday: "mon",
+    tuesday: "tue",
+    wednesday: "wed",
+    thursday: "thu",
+    friday: "fri",
+    saturday: "sat",
+    sunday: "sun",
+  };
+
+  for (const [kRaw, v] of Object.entries(input)) {
+    const k = alias[String(kRaw).toLowerCase().trim()] || String(kRaw).toLowerCase().trim();
+    if (!Object.prototype.hasOwnProperty.call(out, k)) continue;
+
+    const addInterval = (it) => {
+      const open = _coerceTime(it?.open ?? it?.start ?? it?.from);
+      const close = _coerceTime(it?.close ?? it?.end ?? it?.to);
+      if (open && close) out[k].push({ open, close });
+    };
+
+    if (typeof v === "string") {
+      const parsed = _parseRangeString(v);
+      if (parsed) out[k].push(parsed);
+      continue;
+    }
+    if (Array.isArray(v)) {
+      v.forEach((it) => {
+        if (typeof it === "string") {
+          const parsed = _parseRangeString(it);
+          if (parsed) out[k].push(parsed);
+          return;
+        }
+        if (it && typeof it === "object") addInterval(it);
+      });
+      continue;
+    }
+    if (v && typeof v === "object") {
+      // {open, close} or {0:{open,close},1:{...}}
+      if ("open" in v || "close" in v || "start" in v || "end" in v || "from" in v || "to" in v) {
+        addInterval(v);
+      } else {
+        Object.values(v).forEach((it) => it && typeof it === "object" && addInterval(it));
+      }
+    }
+  }
+
+  // Sort intervals within each day for nicer display.
+  for (const d of OPENING_HOURS_DAYS) {
+    out[d.key] = (out[d.key] || []).slice().sort((a, b) => String(a.open).localeCompare(String(b.open)));
+  }
+  return out;
+}
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const token = localStorage.getItem("admin_token");
@@ -58,6 +166,7 @@ export default function AdminDashboard() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [copyFromDeliverooLoading, setCopyFromDeliverooLoading] = useState(false);
   const [copyFromDeliverooMessage, setCopyFromDeliverooMessage] = useState(null);
+  const [openingHoursAdvanced, setOpeningHoursAdvanced] = useState(false);
 
   // Gallery
   const [galleryImages, setGalleryImages] = useState([]);
@@ -125,6 +234,12 @@ export default function AdminDashboard() {
   const loadSettings = useCallback(async () => {
     try {
       const data = await getAdminRestaurant(token);
+      // Normalize to a consistent structure so we can render a friendly editor.
+      if (data && typeof data.opening_hours === "object" && data.opening_hours) {
+        data.opening_hours = normalizeOpeningHours(data.opening_hours);
+      } else {
+        data.opening_hours = normalizeOpeningHours(null);
+      }
       setSettings(data);
     } catch (e) {
       setError(e.message);
@@ -658,29 +773,171 @@ export default function AdminDashboard() {
                 />
               </div>
               <div className="form-group">
-                <label>Opening hours (optional, JSON)</label>
-                <textarea
-                  value={
-                    typeof settings.opening_hours === "object" && settings.opening_hours
-                      ? JSON.stringify(settings.opening_hours, null, 2)
-                      : (settings.opening_hours || "")
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
-                    if (!v) {
-                      setSettings((s) => ({ ...s, opening_hours: null }));
-                      return;
-                    }
-                    try {
-                      setSettings((s) => ({ ...s, opening_hours: JSON.parse(v) }));
-                    } catch {
-                      /* keep previous value if invalid JSON */
-                    }
-                  }}
-                  rows={4}
-                  placeholder='{"mon": "9-17", "tue": "9-17", ...}'
-                  style={{ fontFamily: "monospace", fontSize: "0.85rem" }}
-                />
+                <label>Opening hours</label>
+                <div className="card" style={{ padding: "14px 16px" }}>
+                  <p style={{ margin: "0 0 12px", color: "var(--text-light)", fontSize: "0.9rem" }}>
+                    Set when you are open for pickup. Leave a day empty to mark it as closed.
+                  </p>
+
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {OPENING_HOURS_DAYS.map((d) => {
+                      const dayIntervals = (settings.opening_hours && settings.opening_hours[d.key]) || [];
+                      const isClosed = !dayIntervals || dayIntervals.length === 0;
+                      return (
+                        <div key={d.key} style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 10, alignItems: "start" }}>
+                          <div style={{ paddingTop: 8, fontWeight: 700 }}>{d.label}</div>
+                          <div style={{ display: "grid", gap: 8 }}>
+                            {isClosed ? (
+                              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                                <span className="badge" style={{ background: "rgba(148,163,184,0.25)", color: "var(--ink)" }}>
+                                  Closed
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  onClick={() => {
+                                    setSettings((s) => {
+                                      const next = normalizeOpeningHours(s.opening_hours);
+                                      next[d.key] = [{ open: "09:00", close: "17:00" }];
+                                      return { ...s, opening_hours: next };
+                                    });
+                                  }}
+                                >
+                                  + Add hours
+                                </button>
+                              </div>
+                            ) : (
+                              <>
+                                {dayIntervals.map((it, idx) => (
+                                  <div key={`${d.key}-${idx}`} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                    <input
+                                      type="time"
+                                      value={it.open || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setSettings((s) => {
+                                          const next = normalizeOpeningHours(s.opening_hours);
+                                          const list = (next[d.key] || []).slice();
+                                          list[idx] = { ...(list[idx] || {}), open: val };
+                                          next[d.key] = list;
+                                          return { ...s, opening_hours: next };
+                                        });
+                                      }}
+                                      style={{ width: 140 }}
+                                    />
+                                    <span style={{ color: "var(--text-light)" }}>to</span>
+                                    <input
+                                      type="time"
+                                      value={it.close || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setSettings((s) => {
+                                          const next = normalizeOpeningHours(s.opening_hours);
+                                          const list = (next[d.key] || []).slice();
+                                          list[idx] = { ...(list[idx] || {}), close: val };
+                                          next[d.key] = list;
+                                          return { ...s, opening_hours: next };
+                                        });
+                                      }}
+                                      style={{ width: 140 }}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline btn-sm"
+                                      onClick={() => {
+                                        setSettings((s) => {
+                                          const next = normalizeOpeningHours(s.opening_hours);
+                                          next[d.key] = (next[d.key] || []).filter((_, i) => i !== idx);
+                                          return { ...s, opening_hours: next };
+                                        });
+                                      }}
+                                      title="Remove"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => {
+                                      setSettings((s) => {
+                                        const next = normalizeOpeningHours(s.opening_hours);
+                                        next[d.key] = [...(next[d.key] || []), { open: "09:00", close: "17:00" }];
+                                        return { ...s, opening_hours: next };
+                                      });
+                                    }}
+                                  >
+                                    + Add interval
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => {
+                                      setSettings((s) => {
+                                        const next = normalizeOpeningHours(s.opening_hours);
+                                        next[d.key] = [];
+                                        return { ...s, opening_hours: next };
+                                      });
+                                    }}
+                                  >
+                                    Mark closed
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => {
+                        setSettings((s) => ({ ...s, opening_hours: normalizeOpeningHours(null) }));
+                      }}
+                    >
+                      Clear all
+                    </button>
+                    <label style={{ margin: 0, display: "flex", alignItems: "center", gap: 8, color: "var(--text-light)" }}>
+                      <input
+                        type="checkbox"
+                        checked={openingHoursAdvanced}
+                        onChange={(e) => setOpeningHoursAdvanced(e.target.checked)}
+                        style={{ width: "auto" }}
+                      />
+                      Advanced (JSON)
+                    </label>
+                  </div>
+
+                  {openingHoursAdvanced && (
+                    <div style={{ marginTop: 10 }}>
+                      <textarea
+                        value={JSON.stringify(settings.opening_hours || {}, null, 2)}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          if (!v) {
+                            setSettings((s) => ({ ...s, opening_hours: normalizeOpeningHours(null) }));
+                            return;
+                          }
+                          try {
+                            const parsed = JSON.parse(v);
+                            setSettings((s) => ({ ...s, opening_hours: normalizeOpeningHours(parsed) }));
+                          } catch {
+                            // ignore invalid JSON
+                          }
+                        }}
+                        rows={6}
+                        style={{ fontFamily: "monospace", fontSize: "0.85rem" }}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
               <button type="submit" className="btn btn-primary btn-sm" disabled={settingsSaving}>
                 {settingsSaving ? "Saving…" : "Save details"}

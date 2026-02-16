@@ -24,11 +24,11 @@ INSTAGRAM_APP_ID="936619743392459"
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
 echo "==> Fetching restaurant list"
-RESTAURANTS=$(curl -s "https://modernwebbuilds.co.uk/api/restaurants")
+RESTAURANTS=$(curl -s "https://forkitt.com/api/restaurants")
 SLUGS=$(echo "$RESTAURANTS" | python3 -c "import sys,json; [print(r['slug']) for r in json.load(sys.stdin)]")
 
 for SLUG in $SLUGS; do
-  DETAIL=$(curl -s "https://modernwebbuilds.co.uk/api/restaurants/$SLUG")
+  DETAIL=$(curl -s "https://forkitt.com/api/restaurants/$SLUG")
   HANDLE=$(echo "$DETAIL" | python3 -c "import sys,json; print(json.load(sys.stdin).get('instagram_handle') or '')")
 
   if [[ -z "$HANDLE" ]]; then

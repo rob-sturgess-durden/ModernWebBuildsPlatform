@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .database import init_db
 from . import config
-from .routers import restaurants, menu, orders, admin, superadmin, webhooks, sendgrid_inbound, uploads
+from .routers import restaurants, menu, orders, admin, superadmin, webhooks, sendgrid_inbound, uploads, marketing, owner_portal
 
 # Ensure upload directory exists before StaticFiles mounts (Starlette checks at import-time).
 try:
@@ -40,6 +40,8 @@ app.include_router(superadmin.router, prefix="/api")
 app.include_router(webhooks.router, prefix="/api")
 app.include_router(sendgrid_inbound.router, prefix="/api")
 app.include_router(uploads.router, prefix="/api")
+app.include_router(marketing.router, prefix="/api")
+app.include_router(owner_portal.router, prefix="/api")
 
 # Serve uploaded media via backend so nginx only needs to proxy /api/*.
 app.mount("/api/media", StaticFiles(directory=config.UPLOAD_DIR), name="media")

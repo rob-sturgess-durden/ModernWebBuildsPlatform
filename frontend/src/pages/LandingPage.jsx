@@ -124,22 +124,22 @@ export default function LandingPage() {
                 <div className="forkit-contact-item">
                   <i className="fas fa-phone"></i>
                   <div>
-                    <h4>Phone</h4>
-                    <a href="tel:07939533137">07939 533 137</a>
+                    <h4>Call Sam</h4>
+                    <a href="tel:07939533137">Call Sam on 07939 533137</a>
                   </div>
                 </div>
                 <div className="forkit-contact-item">
                   <i className="fab fa-instagram"></i>
                   <div>
                     <h4>Instagram</h4>
-                    <a href="https://instagram.com/modernwebbuilds" target="_blank" rel="noreferrer">@modernwebbuilds</a>
+                    <a href="https://instagram.com/forkitt" target="_blank" rel="noreferrer">@forkitt</a>
                   </div>
                 </div>
                 <div className="forkit-contact-item">
                   <i className="fas fa-envelope"></i>
                   <div>
                     <h4>Email</h4>
-                    <a href="mailto:hello@modernwebbuilds.com">hello@modernwebbuilds.com</a>
+                    <a href="mailto:hello@forkitt.com">hello@forkitt.com</a>
                   </div>
                 </div>
               </div>
@@ -171,9 +171,9 @@ export default function LandingPage() {
             <div className="forkit-footer-section">
               <h4>Contact</h4>
               <ul>
-                <li><a href="tel:07939533137">07939 533 137</a></li>
-                <li><a href="https://instagram.com/modernwebbuilds">@modernwebbuilds</a></li>
-                <li><a href="mailto:hello@modernwebbuilds.com">hello@modernwebbuilds.com</a></li>
+                <li><a href="tel:07939533137">Call Sam on 07939 533137</a></li>
+                <li><a href="https://instagram.com/forkitt">@forkitt</a></li>
+                <li><a href="mailto:hello@forkitt.com">hello@forkitt.com</a></li>
               </ul>
             </div>
           </div>

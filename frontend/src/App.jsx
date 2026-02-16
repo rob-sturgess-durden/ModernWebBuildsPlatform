@@ -1,4 +1,5 @@
 import { Routes, Route, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import Header from "./components/layout/Header";
 import Footer from "./components/layout/Footer";
 import LandingPage from "./pages/LandingPage";
@@ -9,6 +10,7 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import SuperAdminLogin from "./pages/SuperAdminLogin";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import InstallPrompt from "./components/pwa/InstallPrompt";
 
 export default function App() {
   const location = useLocation();
@@ -18,6 +20,13 @@ export default function App() {
   if (isLanding) {
     return <LandingPage />;
   }
+
+  // Default theme for non-restaurant pages
+  useEffect(() => {
+    const path = location.pathname || "/";
+    const isRestaurant = /^\/[^/]+$/.test(path) && !["/restaurants", "/admin", "/superadmin"].includes(path);
+    if (!isRestaurant) document.documentElement.dataset.theme = "modern";
+  }, [location.pathname]);
 
   // Restaurant pages have their own hero banner, so hide the site header
   const isRestaurantPage = /^\/[^/]+$/.test(location.pathname)
@@ -38,6 +47,7 @@ export default function App() {
         </Routes>
       </main>
       <Footer />
+      <InstallPrompt />
     </div>
   );
 }

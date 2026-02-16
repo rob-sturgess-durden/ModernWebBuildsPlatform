@@ -5,6 +5,8 @@ import { useBasket } from "../context/BasketContext";
 import RestaurantHero from "../components/restaurant/RestaurantHero";
 import MapWidget from "../components/restaurant/MapWidget";
 import InstagramFeed from "../components/restaurant/InstagramFeed";
+import OpeningHours from "../components/restaurant/OpeningHours";
+import DealsSignup from "../components/restaurant/DealsSignup";
 import MenuSection from "../components/menu/MenuSection";
 import Basket from "../components/order/Basket";
 import CheckoutForm from "../components/order/CheckoutForm";
@@ -24,6 +26,7 @@ export default function RestaurantPage() {
   const [needsPassword, setNeedsPassword] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
+  const [activeCategory, setActiveCategory] = useState(null);
 
   const loadRestaurant = (pw = null) => {
     setLoading(true);
@@ -57,6 +60,16 @@ export default function RestaurantPage() {
   useEffect(() => {
     loadRestaurant();
   }, [slug]);
+
+  useEffect(() => {
+    if (!restaurant) return;
+    const theme = (restaurant.theme || "modern").toLowerCase();
+    document.documentElement.dataset.theme = theme;
+    return () => {
+      // Reset so non-restaurant pages don't inherit the last restaurant's theme.
+      document.documentElement.dataset.theme = "modern";
+    };
+  }, [restaurant]);
 
   const handlePasswordSubmit = (e) => {
     e.preventDefault();
@@ -113,9 +126,26 @@ export default function RestaurantPage() {
 
   if (checkout) {
     return (
-      <section className="section" style={{ padding: "72px 6vw" }}>
-        <div className="container">
+      <section className="section" style={{ padding: "48px 6vw" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+            {restaurant.logo_url ? (
+              <img
+                src={restaurant.logo_url}
+                alt={restaurant.name}
+                style={{ width: 72, height: 72, objectFit: "contain", borderRadius: 12, marginBottom: 12 }}
+              />
+            ) : (
+              <div style={{ width: 72, height: 72, borderRadius: 12, background: "var(--bg-soft, #f5f5f5)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: "1.8rem", color: "var(--text-light)" }}>
+                <i className="fas fa-utensils" />
+              </div>
+            )}
+            <h2 style={{ fontFamily: '"Fraunces", serif', fontSize: "1.4rem", margin: 0 }}>
+              {restaurant.name}
+            </h2>
+          </div>
           <CheckoutForm
+            restaurant={restaurant}
             onSuccess={handleOrderSuccess}
             onCancel={() => setCheckout(false)}
           />
@@ -147,6 +177,8 @@ export default function RestaurantPage() {
         </div>
       </section>
 
+      <DealsSignup restaurant={restaurant} />
+
       {instagram.length > 0 ? (
         <InstagramFeed posts={instagram} handle={restaurant.instagram_handle} />
       ) : gallery.length > 0 ? (
@@ -175,7 +207,7 @@ export default function RestaurantPage() {
       <section id="menu" className="menu" style={{ padding: "72px 6vw" }}>
         <div className="container">
           <div className="restaurant-layout">
-            <div>
+            <div className="restaurant-layout__menu">
               <div className="section-title" style={{ marginBottom: 32, textAlign: "left" }}>
                 <p className="eyebrow">Menu</p>
                 <h2 style={{ fontFamily: '"Fraunces", serif', margin: "12px 0 0" }}>
@@ -185,26 +217,47 @@ export default function RestaurantPage() {
               {menu.length === 0 ? (
                 <p style={{ color: "var(--text-light)" }}>No menu items available yet.</p>
               ) : (
-                menu.map((cat) => (
-                  <MenuSection key={cat.id} category={cat} onAddItem={handleAddItem} />
-                ))
+                <>
+                  <div className="menu-tabs">
+                    <button
+                      className={`menu-tab${activeCategory === null ? " menu-tab--active" : ""}`}
+                      onClick={() => setActiveCategory(null)}
+                    >
+                      All
+                    </button>
+                    {menu.map((cat) => (
+                      <button
+                        key={cat.id}
+                        className={`menu-tab${activeCategory === cat.id ? " menu-tab--active" : ""}`}
+                        onClick={() => setActiveCategory(cat.id)}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                  {(activeCategory === null ? menu : menu.filter((cat) => cat.id === activeCategory)).map((cat) => (
+                    <MenuSection key={cat.id} category={cat} onAddItem={handleAddItem} />
+                  ))}
+                </>
               )}
             </div>
 
-            <div>
-              <Basket onCheckout={() => setCheckout(true)} />
-
-              <div className="contact-card" style={{ marginTop: "2rem" }}>
-                <p className="meta-title">Find us</p>
-                <MapWidget
-                  lat={restaurant.latitude}
-                  lng={restaurant.longitude}
-                  name={restaurant.name}
-                  address={restaurant.address}
-                />
-                <p style={{ marginTop: "0.8rem", color: "var(--text-light)", fontSize: "0.9rem" }}>
-                  {restaurant.address}
-                </p>
+            <div className="restaurant-layout__sidebar">
+              <div className="restaurant-layout__sidebar-inner">
+                <Basket onCheckout={() => { setCheckout(true); window.scrollTo(0, 0); }} />
+                <div className="contact-card">
+                  <p className="meta-title">Find us</p>
+                  <MapWidget
+                    lat={restaurant.latitude}
+                    lng={restaurant.longitude}
+                    name={restaurant.name}
+                    address={restaurant.address}
+                  />
+                  <p style={{ marginTop: "0.8rem", color: "var(--text-light)", fontSize: "0.9rem" }}>
+                    {restaurant.address}
+                  </p>
+                  <OpeningHours openingHours={restaurant.opening_hours} />
+                </div>
               </div>
             </div>
           </div>

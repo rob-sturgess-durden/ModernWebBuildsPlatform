@@ -23,9 +23,9 @@ A professional, responsive website for a web development business showcasing ser
 - SEO-friendly structure
 
 ### 📞 Contact Information
-- Phone: 07939 533 137
-- Instagram: @modernwebbuilds
-- Email: hello@modernwebbuilds.com
+- Phone: Call Sam on 07939 533137
+- Instagram: @forkitt
+- Email: hello@forkitt.com
 - Contact form with validation
 
 ## Sections
@@ -118,9 +118,9 @@ The website uses a modern blue color scheme:
 
 ### Contact Information
 Update the following in `index.html`:
-- Phone number: 07939 533 137
-- Instagram: @modernwebbuilds
-- Email: hello@modernwebbuilds.com
+- Phone number: Call Sam on 07939 533137
+- Instagram: @forkitt
+- Email: hello@forkitt.com
 
 ## Features Included
 

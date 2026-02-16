@@ -1,7 +1,7 @@
 export default function RestaurantHero({ restaurant }) {
   const heroStyle = restaurant.banner_url
     ? {
-        backgroundImage: `linear-gradient(120deg, rgba(27,27,27,0.82), rgba(27,27,27,0.45)), url(${restaurant.banner_url})`,
+        backgroundImage: `linear-gradient(120deg, var(--hero-overlay-1), var(--hero-overlay-2)), url(${restaurant.banner_url})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
       }
@@ -33,7 +33,7 @@ export default function RestaurantHero({ restaurant }) {
             </div>
           </div>
 
-          <a className="powered-by" href="https://modernwebbuilds.co.uk/" target="_blank" rel="noreferrer">
+          <a className="powered-by" href="https://forkitt.com/" target="_blank" rel="noreferrer">
             Powered by <strong>ForkIt</strong>
           </a>
         </div>

@@ -90,6 +90,34 @@ export function getOrderStatus(orderNumber) {
   return request(`/orders/${orderNumber}`);
 }
 
+export function checkVerified(phone, email) {
+  const params = new URLSearchParams();
+  if (phone) params.set("phone", phone);
+  if (email) params.set("email", email);
+  return request(`/orders/check-verified?${params}`);
+}
+
+export function sendVerificationCode(phone, email) {
+  return request("/orders/send-code", {
+    method: "POST",
+    body: JSON.stringify({ phone, email }),
+  });
+}
+
+export function verifyCode(phone, email, code) {
+  return request("/orders/verify-code", {
+    method: "POST",
+    body: JSON.stringify({ phone, email, code }),
+  });
+}
+
+export function marketingSignup({ restaurant_id = null, name = "", email = "", phone = "" } = {}) {
+  return request("/marketing/signup", {
+    method: "POST",
+    body: JSON.stringify({ restaurant_id, name, email, phone }),
+  });
+}
+
 // Admin endpoints
 function adminHeaders(token) {
   return { Authorization: `Bearer ${token}` };
@@ -97,6 +125,20 @@ function adminHeaders(token) {
 
 export function adminLogin(token) {
   return request("/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function requestMagicLink(email) {
+  return request("/admin/magic-link", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function verifyMagicLink(token) {
+  return request("/admin/magic-link/verify", {
     method: "POST",
     body: JSON.stringify({ token }),
   });

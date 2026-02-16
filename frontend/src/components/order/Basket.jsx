@@ -6,7 +6,7 @@ export default function Basket({ onCheckout }) {
   if (basket.items.length === 0) return null;
 
   return (
-    <div className="hero-card" style={{ position: "sticky", top: 100 }}>
+    <div className="hero-card basket-panel">
       <div className="card-header">
         <h3 style={{ fontFamily: '"Fraunces", serif', margin: "0 0 16px" }}>Your basket</h3>
       </div>

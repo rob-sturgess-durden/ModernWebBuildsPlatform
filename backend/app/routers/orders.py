@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+import random
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Body, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from ..database import get_db
 from ..models import OrderCreate, OrderResponse
@@ -10,9 +13,113 @@ from ..services.notification import (
     notify_customer_received,
     is_whatsapp_opted_in,
     send_whatsapp_optin_request,
+    send_email,
+    send_sms,
 )
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+@router.get("/check-verified")
+def check_verified(phone: str = "", email: str = ""):
+    """Check if a customer is already verified by phone or email."""
+    phone = (phone or "").strip()
+    email = (email or "").strip().lower()
+    if not phone and not email:
+        return {"verified": False}
+
+    with get_db() as db:
+        if phone:
+            row = db.execute("SELECT id FROM verified_customers WHERE phone = ?", (phone,)).fetchone()
+            if row:
+                return {"verified": True}
+        if email:
+            row = db.execute("SELECT id FROM verified_customers WHERE email = ?", (email,)).fetchone()
+            if row:
+                return {"verified": True}
+    return {"verified": False}
+
+
+@router.post("/send-code")
+def send_verification_code(body: dict = Body(...)):
+    """Send a 4-digit verification code via email or SMS."""
+    phone = (body.get("phone") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    if not phone and not email:
+        raise HTTPException(status_code=422, detail="Phone or email required")
+
+    code = str(random.randint(1000, 9999))
+    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO verification_codes (phone, email, code, expires_at) VALUES (?, ?, ?, ?)",
+            (phone or None, email or None, code, expires.isoformat()),
+        )
+
+    channel = None
+    if email:
+        send_email(
+            email,
+            "Your ForkIt verification code",
+            f"Your verification code is: {code}\n\nThis code expires in 10 minutes.",
+        )
+        channel = "email"
+    elif phone:
+        send_sms(phone, f"Your ForkIt verification code is: {code}")
+        channel = "sms"
+
+    return {"ok": True, "channel": channel}
+
+
+@router.post("/verify-code")
+def verify_code(body: dict = Body(...)):
+    """Verify a 4-digit code and mark the customer as verified."""
+    phone = (body.get("phone") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    if not code:
+        raise HTTPException(status_code=422, detail="Code is required")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    with get_db() as db:
+        # Match on phone or email, whichever was used to send
+        conditions = []
+        params = []
+        if email:
+            conditions.append("email = ?")
+            params.append(email)
+        if phone:
+            conditions.append("phone = ?")
+            params.append(phone)
+        if not conditions:
+            return {"verified": False}
+
+        where = " OR ".join(conditions)
+        row = db.execute(
+            f"""SELECT id FROM verification_codes
+                WHERE ({where}) AND code = ? AND used = 0 AND expires_at > ?
+                ORDER BY id DESC LIMIT 1""",
+            (*params, code, now),
+        ).fetchone()
+
+        if not row:
+            return {"verified": False}
+
+        db.execute("UPDATE verification_codes SET used = 1 WHERE id = ?", (row["id"],))
+
+        # Mark customer as verified
+        if phone:
+            existing = db.execute("SELECT id FROM verified_customers WHERE phone = ?", (phone,)).fetchone()
+            if not existing:
+                db.execute("INSERT INTO verified_customers (phone, email) VALUES (?, ?)", (phone, email or None))
+        if email:
+            existing = db.execute("SELECT id FROM verified_customers WHERE email = ?", (email,)).fetchone()
+            if not existing:
+                db.execute("INSERT INTO verified_customers (phone, email) VALUES (?, ?)", (phone or None, email))
+
+    return {"verified": True}
 
 
 @router.post("", response_model=OrderResponse, status_code=201)

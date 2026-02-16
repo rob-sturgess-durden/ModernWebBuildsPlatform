@@ -42,7 +42,7 @@ def get_restaurant(slug: str, password: str | None = Query(None)):
 def get_instagram_feed(slug: str, limit: int = 8, password: str | None = Query(None)):
     limit = max(1, min(int(limit), 12))
     row = _require_accessible(slug, password)
-    handle = row["instagram_handle"]
+    handle = (row["instagram_handle"] or "").strip().lstrip("@")
     if not handle:
         return []
     posts = get_recent_posts(handle, limit=limit)

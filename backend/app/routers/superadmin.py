@@ -73,6 +73,14 @@ def _row_to_admin(row, db) -> dict:
     if row["opening_hours"]:
         try:
             hours = json.loads(row["opening_hours"])
+            # Handle double-encoded JSON (e.g. "\"{...}\"")
+            if isinstance(hours, str):
+                try:
+                    hours2 = json.loads(hours)
+                    if isinstance(hours2, dict):
+                        hours = hours2
+                except (json.JSONDecodeError, TypeError):
+                    pass
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -98,6 +106,8 @@ def _row_to_admin(row, db) -> dict:
         facebook_handle=row["facebook_handle"],
         phone=row["phone"],
         whatsapp_number=row["whatsapp_number"],
+        mobile_number=row["mobile_number"] if "mobile_number" in row.keys() else None,
+        notification_channel=row["notification_channel"] if "notification_channel" in row.keys() and row["notification_channel"] else "whatsapp",
         owner_email=row["owner_email"],
         admin_token=row["admin_token"],
         theme=row["theme"],
@@ -166,6 +176,8 @@ def create_restaurant(body: dict | str = Body(...), authorization: str = Header(
     slug = _make_slug(model.name)
     admin_token = secrets.token_urlsafe(32)
     hours_json = json.dumps(model.opening_hours) if model.opening_hours else None
+    whatsapp = getattr(model, "whatsapp_number", None)
+    mobile = (model.mobile_number or whatsapp or None)
 
     with get_db() as db:
         # Check slug uniqueness
@@ -177,15 +189,15 @@ def create_restaurant(body: dict | str = Body(...), authorization: str = Header(
             """INSERT INTO restaurants
                (name, slug, address, cuisine_type, about_text, google_place_id, latitude, longitude,
                 logo_url, banner_url,
-                instagram_handle, facebook_handle, phone, whatsapp_number,
+                instagram_handle, facebook_handle, phone, whatsapp_number, mobile_number, notification_channel,
                 owner_email, admin_token, theme, deliveroo_url, justeat_url,
                 is_active, opening_hours, status, preview_password)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 model.name, slug, model.address, model.cuisine_type,
                 model.about_text, model.google_place_id, model.latitude, model.longitude, model.logo_url, model.banner_url,
                 model.instagram_handle,
-                model.facebook_handle, model.phone, model.whatsapp_number,
+                model.facebook_handle, model.phone, (whatsapp or mobile), mobile, model.notification_channel or "whatsapp",
                 model.owner_email, admin_token, model.theme,
                 model.deliveroo_url, model.justeat_url,
                 int(model.is_active), hours_json,
@@ -238,12 +250,20 @@ def update_restaurant(restaurant_id: int, body: dict | str = Body(...), authoriz
             updates["facebook_handle"] = model.facebook_handle
         if model.phone is not None:
             updates["phone"] = model.phone
-        if model.whatsapp_number is not None:
-            updates["whatsapp_number"] = model.whatsapp_number
+        whatsapp_number = getattr(model, "whatsapp_number", None)
+        if whatsapp_number is not None:
+            updates["whatsapp_number"] = whatsapp_number
+            # Keep new column in sync while legacy frontend still uses whatsapp_number.
+            updates["mobile_number"] = whatsapp_number
+        if model.mobile_number is not None:
+            updates["mobile_number"] = model.mobile_number
+            updates.setdefault("whatsapp_number", model.mobile_number)
+        if model.notification_channel is not None:
+            updates["notification_channel"] = (model.notification_channel or "").strip().lower()
         if model.owner_email is not None:
             updates["owner_email"] = model.owner_email
         if model.theme is not None:
-            updates["theme"] = model.theme
+            updates["theme"] = (model.theme or "").strip().lower() or "modern"
         if model.deliveroo_url is not None:
             updates["deliveroo_url"] = model.deliveroo_url
         if model.justeat_url is not None:
@@ -451,4 +471,65 @@ def places_import(
     ).model_dump()
 
     # Reuse existing create flow so slug/admin_token/etc are consistent.
-    return create_restaurant(create_payload, authorization=authorization)
+    result = create_restaurant(create_payload, authorization=authorization)
+    rid = result.id
+
+    # --- Download Google Places photos as permanent uploads ---
+    photo_names = details.get("photo_names") or []
+    banner_url = None
+    gallery_urls: list[str] = []
+
+    for i, pname in enumerate(photo_names[:10]):  # cap at 10 photos
+        try:
+            kind = "banner" if i == 0 else "gallery"
+            max_px = 2400 if i == 0 else 1600
+            url = google_places_service.download_photo_to_upload(
+                pname, rid, kind=kind, max_px=max_px
+            )
+            if url and i == 0:
+                banner_url = url
+            elif url:
+                gallery_urls.append(url)
+        except Exception:
+            pass  # don't fail import over a single photo
+
+    # --- Try to fetch a logo from the restaurant's website ---
+    logo_url = None
+    website = details.get("website")
+    if website:
+        try:
+            logo_url = google_places_service.fetch_website_logo(website, rid)
+        except Exception:
+            pass
+
+    # Update the restaurant with downloaded images
+    updates: dict = {}
+    if banner_url:
+        updates["banner_url"] = banner_url
+    if logo_url:
+        updates["logo_url"] = logo_url
+
+    if updates:
+        with get_db() as db:
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            db.execute(
+                f"UPDATE restaurants SET {set_clause} WHERE id = ?",
+                (*updates.values(), rid),
+            )
+        # Refresh result fields
+        if banner_url:
+            result.banner_url = banner_url
+        if logo_url:
+            result.logo_url = logo_url
+
+    # Add gallery images
+    if gallery_urls:
+        with get_db() as db:
+            for order, url in enumerate(gallery_urls):
+                db.execute(
+                    "INSERT INTO gallery_images (restaurant_id, image_url, caption, display_order) "
+                    "VALUES (?, ?, NULL, ?)",
+                    (rid, url, order),
+                )
+
+    return result

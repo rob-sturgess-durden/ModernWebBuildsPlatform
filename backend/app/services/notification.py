@@ -455,40 +455,45 @@ def notify_new_order(order: dict, restaurant: dict):
     if order.get("special_instructions"):
         message += f"Notes: {order['special_instructions']}\n"
     token = order.get("owner_action_token", "")
-    accept_url = f"{config.PUBLIC_BASE_URL}/api/orders/{order['order_number']}/owner-action?action=confirmed&token={token}"
-    reject_url = f"{config.PUBLIC_BASE_URL}/api/orders/{order['order_number']}/owner-action?action=cancelled&token={token}"
+    manage_url = f"{config.PUBLIC_BASE_URL}/api/o/{token}"
     message += (
-        "\nOwner actions:\n"
-        f"Accept: {accept_url}\n"
-        f"Reject: {reject_url}\n"
+        "\nManage this order:\n"
+        f"{manage_url}\n"
     )
     message += f"\nDashboard: {config.PUBLIC_BASE_URL}/admin/dashboard"
 
-    if restaurant.get("whatsapp_number"):
-        owner_wa = restaurant["whatsapp_number"]
+    # Owner mobile (preferred) with backwards-compat fallback to whatsapp_number.
+    owner_mobile = (restaurant.get("mobile_number") or restaurant.get("whatsapp_number") or "").strip()
+    owner_channel = (restaurant.get("notification_channel") or "whatsapp").strip().lower()
 
-        # WhatsApp often requires templates for business-initiated messages (outside the 24h window).
-        # If a template SID is configured, use it. Otherwise fall back to plain text.
-        if config.TWILIO_OWNER_NEW_ORDER_CONTENT_SID:
-            ok, sid = send_whatsapp_template_with_sid(
-                owner_wa,
-                config.TWILIO_OWNER_NEW_ORDER_CONTENT_SID,
-                {
-                    # ContentVariables keys must match the template variable names (e.g. {{first_name}}).
-                    "first_name": restaurant.get("name") or "there",
-                },
-            )
-            if ok and sid:
-                _check_delivery_and_optin(owner_wa, sid)
+    if owner_mobile:
+        if owner_channel == "sms":
+            ok = send_sms(owner_mobile, message)
+            if not ok:
+                logger.warning("Owner SMS notification failed for %s", order.get("order_number"))
         else:
-            ok = send_whatsapp(owner_wa, message)
+            # WhatsApp often requires templates for business-initiated messages (outside the 24h window).
+            # If a template SID is configured, use it. Otherwise fall back to plain text.
+            if config.TWILIO_OWNER_NEW_ORDER_CONTENT_SID:
+                ok, sid = send_whatsapp_template_with_sid(
+                    owner_mobile,
+                    config.TWILIO_OWNER_NEW_ORDER_CONTENT_SID,
+                    {
+                        # ContentVariables keys must match the template variable names (e.g. {{first_name}}).
+                        "first_name": restaurant.get("name") or "there",
+                    },
+                )
+                if ok and sid:
+                    _check_delivery_and_optin(owner_mobile, sid)
+            else:
+                ok = send_whatsapp(owner_mobile, message)
 
-        if not ok:
-            # If owner isn't opted-in, send the opt-in template to establish a session for future messages.
-            if config.TWILIO_OPTIN_ENABLED and not is_whatsapp_opted_in(owner_wa):
-                logger.info("Sending WhatsApp opt-in template to owner %s", owner_wa)
-                send_whatsapp_optin_request(owner_wa)
-            logger.warning("Owner WhatsApp notification failed for %s", order.get("order_number"))
+            if not ok:
+                # If owner isn't opted-in, send the opt-in template to establish a session for future messages.
+                if config.TWILIO_OPTIN_ENABLED and not is_whatsapp_opted_in(owner_mobile):
+                    logger.info("Sending WhatsApp opt-in template to owner %s", owner_mobile)
+                    send_whatsapp_optin_request(owner_mobile)
+                logger.warning("Owner WhatsApp notification failed for %s", order.get("order_number"))
     if restaurant.get("owner_email"):
         send_email(
             restaurant["owner_email"],
@@ -564,5 +569,34 @@ def notify_customer_status(order: dict, restaurant_name: str):
         send_email(
             order["customer_email"],
             f"Order {order['order_number']} - {status.title()}",
+            message,
+        )
+
+
+def notify_customer_time_changed(order: dict, restaurant_name: str, note: str | None = None):
+    """Notify customer that pickup time or note has been updated by the restaurant."""
+    extra = ""
+    if note and str(note).strip():
+        extra = f"\n\nNote from the restaurant:\n{str(note).strip()}"
+
+    message = (
+        f"Update for your order {order['order_number']} at {restaurant_name}:\n"
+        f"Pickup time is now: {_format_pickup_time(order.get('pickup_time'))}{extra}\n\n"
+        f"Track your order: {config.PUBLIC_BASE_URL}/order/{order['order_number']}"
+    )
+
+    phone = order.get("customer_phone") or ""
+    if phone:
+        if is_whatsapp_opted_in(phone):
+            send_whatsapp(phone, message)
+        else:
+            send_whatsapp_optin_request(phone)
+        if order.get("sms_optin"):
+            send_sms(phone, message)
+
+    if order.get("customer_email"):
+        send_email(
+            order["customer_email"],
+            f"Pickup time updated: {order['order_number']} · {restaurant_name}",
             message,
         )

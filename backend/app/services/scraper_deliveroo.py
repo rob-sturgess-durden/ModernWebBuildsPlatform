@@ -1,5 +1,6 @@
 import json
 import logging
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
@@ -9,6 +10,7 @@ class DeliverooScraper:
     """Scrape menu items from Deliveroo restaurant pages using Playwright (headless browser)."""
 
     def scrape_menu(self, url: str) -> list[dict]:
+        url = self._normalize_menu_url(url)
         logger.info(f"Scraping Deliveroo with Playwright: {url}")
 
         try:
@@ -93,29 +95,60 @@ class DeliverooScraper:
         logger.warning("No menu items found on Deliveroo page")
         return []
 
+    def _normalize_menu_url(self, url: str) -> str:
+        """
+        Deliveroo sometimes returns a Cloudflare "Just a moment..." page for bare menu URLs.
+        Adding basic query params improves success rate.
+        """
+        try:
+            p = urlparse(url)
+            q = dict(parse_qsl(p.query, keep_blank_values=True))
+            q.setdefault("day", "today")
+            q.setdefault("time", "ASAP")
+            # DELIVERY tends to have the most complete menu data; admin can still choose pickup times separately.
+            q.setdefault("fulfillment_method", "DELIVERY")
+            new_query = urlencode(q, doseq=True)
+            return urlunparse((p.scheme, p.netloc, p.path, p.params, new_query, ""))  # drop fragment
+        except Exception:
+            return url
+
     def _extract_from_next_data(self, data: dict) -> list[dict]:
         """Extract menu items from Next.js __NEXT_DATA__ payload.
 
-        Deliveroo stores menu data at:
-          props.initialState.menuPage.menu.metas.root.items[]
-          props.initialState.menuPage.menu.metas.root.categories[]
+        Deliveroo menu data shape varies by page/version. Prefer:
+          props.initialState.menuPage.menu.metas.root.{items,categories}
+        Fallback to a deep search for a dict containing both list fields
+        `{items: [...], categories: [...]}` under `menuPage.menu`.
         """
         try:
             menu = data["props"]["initialState"]["menuPage"]["menu"]
-            meta_root = menu["metas"]["root"]
         except (KeyError, TypeError):
-            # Fallback: walk the whole tree
-            items = []
+            items: list[dict] = []
+            self._walk_next_data(data, items)
+            return items
+
+        meta_root = None
+        if isinstance(menu, dict):
+            meta_root = (menu.get("metas") or {}).get("root") if isinstance(menu.get("metas"), dict) else None
+
+        root = None
+        if isinstance(meta_root, dict) and isinstance(meta_root.get("items"), list) and isinstance(meta_root.get("categories"), list):
+            root = meta_root
+        else:
+            root = self._deep_find_menu_root(menu)
+
+        if not isinstance(root, dict):
+            items: list[dict] = []
             self._walk_next_data(data, items)
             return items
 
         # Build category id -> name map
         cat_map = {}
-        for cat in meta_root.get("categories", []):
+        for cat in root.get("categories", []):
             if isinstance(cat, dict) and "id" in cat and "name" in cat:
                 cat_map[str(cat["id"])] = cat["name"]
 
-        raw_items = meta_root.get("items", [])
+        raw_items = root.get("items", [])
         results = []
         for obj in raw_items:
             if not isinstance(obj, dict):
@@ -127,6 +160,29 @@ class DeliverooScraper:
             if item:
                 results.append(item)
         return results
+
+    def _deep_find_menu_root(self, obj, depth: int = 0) -> dict | None:
+        """Find a dict containing both list fields `items` and `categories`."""
+        if depth > 12:
+            return None
+        if isinstance(obj, dict):
+            if (
+                isinstance(obj.get("items"), list)
+                and isinstance(obj.get("categories"), list)
+                and obj.get("items")
+                and obj.get("categories")
+            ):
+                return obj
+            for v in obj.values():
+                r = self._deep_find_menu_root(v, depth + 1)
+                if r:
+                    return r
+        elif isinstance(obj, list):
+            for v in obj[:40]:
+                r = self._deep_find_menu_root(v, depth + 1)
+                if r:
+                    return r
+        return None
 
     def _walk_next_data(self, obj, items: list, depth=0):
         """Fallback: recursively walk __NEXT_DATA__ looking for menu item structures."""

@@ -30,7 +30,7 @@ async def sendgrid_inbound(request: Request, background_tasks: BackgroundTasks):
     SendGrid Inbound Parse webhook.
 
     Configure webhook URL:
-      https://modernwebbuilds.co.uk/api/webhooks/sendgrid/inbound?token=YOUR_TOKEN
+      https://forkitt.com/api/webhooks/sendgrid/inbound?token=YOUR_TOKEN
     """
     token = request.query_params.get("token", "")
     if not config.SENDGRID_INBOUND_TOKEN:

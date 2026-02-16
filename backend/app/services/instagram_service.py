@@ -62,6 +62,7 @@ def get_recent_posts(handle: str, limit: int = 8, ttl_seconds: int = 1800) -> li
         return []
 
     now = int(time.time())
+    cached_posts: list[dict] | None = None
 
     with get_db() as db:
         row = db.execute(
@@ -75,26 +76,45 @@ def get_recent_posts(handle: str, limit: int = 8, ttl_seconds: int = 1800) -> li
                 fetched_ts = int(datetime.fromisoformat(fetched_at.replace("Z", "+00:00")).timestamp())
             except Exception:
                 fetched_ts = 0
-            if fetched_ts and (now - fetched_ts) < ttl_seconds:
-                try:
-                    cached = json.loads(row["json"])
-                    if isinstance(cached, list):
-                        return cached[:limit]
-                except Exception:
-                    pass
+            try:
+                cached = json.loads(row["json"])
+                if isinstance(cached, list):
+                    cached_posts = cached
+            except Exception:
+                cached_posts = None
+
+            # If cache is fresh AND has at least 1 post, use it.
+            # If cache is fresh but empty, retry fetch anyway (empty caches happen when IG blocks/rate-limits).
+            if fetched_ts and (now - fetched_ts) < ttl_seconds and cached_posts and len(cached_posts) > 0:
+                return cached_posts[:limit]
 
     # Cache miss (or stale): fetch again.
     try:
         posts = _scrape_public_profile(handle, limit=limit)
+    except requests.HTTPError as e:
+        # Instagram will sometimes rate-limit datacenter IPs (429). In that case:
+        # - don't overwrite any existing cache with empty data
+        # - if we have cached posts (even stale), serve them
+        resp = getattr(e, "response", None)
+        status = getattr(resp, "status_code", None)
+        if status == 429:
+            return (cached_posts or [])[:limit]
+        posts = []
     except Exception:
         posts = []
 
-    with get_db() as db:
-        db.execute(
-            "INSERT INTO instagram_cache(instagram_handle, fetched_at, json) VALUES (?, CURRENT_TIMESTAMP, ?) "
-            "ON CONFLICT(instagram_handle) DO UPDATE SET fetched_at = CURRENT_TIMESTAMP, json = excluded.json",
-            (handle, json.dumps(posts)),
-        )
+    # If fetch failed but we have older cached posts, prefer stale posts over returning an empty feed.
+    if (not posts) and cached_posts and len(cached_posts) > 0:
+        return cached_posts[:limit]
+
+    # Only write cache when we have data (or there's no cache yet). Avoid persisting empty lists
+    # caused by transient blocks/rate-limits.
+    if posts or cached_posts is None:
+        with get_db() as db:
+            db.execute(
+                "INSERT INTO instagram_cache(instagram_handle, fetched_at, json) VALUES (?, CURRENT_TIMESTAMP, ?) "
+                "ON CONFLICT(instagram_handle) DO UPDATE SET fetched_at = CURRENT_TIMESTAMP, json = excluded.json",
+                (handle, json.dumps(posts)),
+            )
 
     return posts[:limit]
-

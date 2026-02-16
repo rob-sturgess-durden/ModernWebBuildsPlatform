@@ -9,9 +9,42 @@ VALID_TRANSITIONS = {
     "cancelled": [],
 }
 
+def normalize_phone(raw: str | None) -> str:
+    """
+    Best-effort phone normalization for Twilio.
+    - strips spaces/symbols
+    - supports UK local mobile format 07xxxxxxxxx -> +44xxxxxxxxxx
+    - supports 00 prefix -> +
+    """
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    if s.startswith("whatsapp:"):
+        s = s.split(":", 1)[1].strip()
+    # keep leading + then digits
+    s = s.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if s.startswith("00"):
+        s = "+" + s[2:]
+    if s.startswith("+"):
+        return "+" + "".join(ch for ch in s[1:] if ch.isdigit())
+    s = "".join(ch for ch in s if ch.isdigit())
+    if not s:
+        return ""
+    # UK local mobile: 07xxxxxxxxx (11 digits)
+    if s.startswith("0") and len(s) == 11:
+        return "+44" + s[1:]
+    if s.startswith("44") and len(s) >= 11:
+        return "+" + s
+    # Fallback: return as-is digits (may still be rejected by Twilio)
+    return s
+
 
 def generate_order_number(restaurant_id: int) -> str:
-    """Generate a human-readable order number like BB-001."""
+    """Generate a human-readable order number like BB-001.
+
+    Note: order_number is UNIQUE across the whole table, not just per restaurant.
+    So the sequence must be unique for a given prefix even if multiple restaurants share it.
+    """
     with get_db() as db:
         row = db.execute(
             "SELECT name FROM restaurants WHERE id = ?", (restaurant_id,)
@@ -19,20 +52,35 @@ def generate_order_number(restaurant_id: int) -> str:
         if not row:
             prefix = "XX"
         else:
-            words = [w for w in row["name"].split() if w[0].isalpha()]
-            prefix = "".join(w[0].upper() for w in words[:2]) if len(words) >= 2 else row["name"][:2].upper()
+            words = [w for w in row["name"].split() if w and w[0].isalpha()]
+            # Use up to 3 initials to reduce collisions (e.g. "Bronson's Burgers Hackney" -> BBH).
+            if words:
+                prefix = "".join(w[0].upper() for w in words[:3])
+            else:
+                prefix = (row["name"][:2] or "XX").upper()
 
-        count = db.execute(
-            "SELECT COUNT(*) as c FROM orders WHERE restaurant_id = ?", (restaurant_id,)
-        ).fetchone()["c"]
+        # Find last order for this prefix and increment its numeric suffix.
+        like = f"{prefix}-%"
+        last = db.execute(
+            "SELECT order_number FROM orders WHERE order_number LIKE ? ORDER BY id DESC LIMIT 1",
+            (like,),
+        ).fetchone()
 
-    return f"{prefix}-{count + 1:03d}"
+    last_n = 0
+    if last and last["order_number"]:
+        try:
+            last_n = int(str(last["order_number"]).rsplit("-", 1)[1])
+        except Exception:
+            last_n = 0
+
+    return f"{prefix}-{last_n + 1:03d}"
 
 
 def create_order(data: dict) -> dict:
     """Create a new order and return it."""
     order_number = generate_order_number(data["restaurant_id"])
     owner_action_token = secrets.token_urlsafe(24)
+    data["customer_phone"] = normalize_phone(data.get("customer_phone"))
 
     with get_db() as db:
         # Validate all menu items exist and belong to this restaurant

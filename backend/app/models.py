@@ -32,6 +32,15 @@ class RestaurantDetail(RestaurantSummary):
         if row["opening_hours"]:
             try:
                 hours = json.loads(row["opening_hours"])
+                # Handle double-encoded JSON (e.g. "\"{...}\"") which can happen if a client
+                # sends opening_hours as a JSON string and we json.dumps it.
+                if isinstance(hours, str):
+                    try:
+                        hours2 = json.loads(hours)
+                        if isinstance(hours2, dict):
+                            hours = hours2
+                    except (json.JSONDecodeError, TypeError):
+                        pass
             except (json.JSONDecodeError, TypeError):
                 pass
         return cls(
@@ -74,6 +83,16 @@ class CustomerSummary(BaseModel):
     customer_email: Optional[str] = None
     order_count: int
     last_order_at: str
+
+class MarketingSignupCreate(BaseModel):
+    restaurant_id: Optional[int] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+class MarketingSignupResponse(BaseModel):
+    ok: bool = True
+    id: int
 
 
 # --- Menu ---
@@ -205,6 +224,8 @@ class RestaurantCreate(BaseModel):
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
+    # Backward-compatible field name used by the current frontend/admin.
+    whatsapp_number: Optional[str] = None
     mobile_number: Optional[str] = None
     notification_channel: str = "whatsapp"
     owner_email: Optional[str] = None
@@ -230,6 +251,8 @@ class RestaurantUpdate(BaseModel):
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
+    # Backward-compatible field name used by the current frontend/admin.
+    whatsapp_number: Optional[str] = None
     mobile_number: Optional[str] = None
     notification_channel: Optional[str] = None
     owner_email: Optional[str] = None
@@ -257,6 +280,8 @@ class RestaurantAdmin(BaseModel):
     instagram_handle: Optional[str] = None
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
+    # Backward-compatible field name used by the current frontend/admin.
+    whatsapp_number: Optional[str] = None
     mobile_number: Optional[str] = None
     notification_channel: str = "whatsapp"
     owner_email: Optional[str] = None

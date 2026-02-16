@@ -1,14 +1,17 @@
 import json
 import re
-from fastapi import APIRouter, HTTPException, Header, BackgroundTasks
+import secrets
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Body
 from ..database import get_db
+from .. import config
 from ..models import (
     AdminLogin, OrderResponse, OrderStatusUpdate,
     MenuItemCreate, MenuItemUpdate, MenuItem, CategoryCreate, ScrapeRequest,
     RestaurantUpdate, CustomerSummary,
 )
 from ..services.order_service import advance_order_status
-from ..services.notification import notify_customer_status
+from ..services.notification import notify_customer_status, send_email
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -37,6 +40,71 @@ def admin_login(body: AdminLogin):
     if not row:
         raise HTTPException(status_code=401, detail="Invalid token")
     return {"restaurant_id": row["id"], "name": row["name"], "slug": row["slug"]}
+
+
+@router.post("/magic-link")
+def request_magic_link(body: dict = Body(...)):
+    """Send a magic login link to the restaurant owner's email."""
+    email = (body.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=422, detail="Email is required")
+
+    with get_db() as db:
+        row = db.execute(
+            "SELECT id, name FROM restaurants WHERE LOWER(owner_email) = ?", (email,)
+        ).fetchone()
+
+        if row:
+            token = secrets.token_urlsafe(32)
+            expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+            db.execute(
+                "INSERT INTO magic_links (restaurant_id, token, expires_at) VALUES (?, ?, ?)",
+                (row["id"], token, expires.isoformat()),
+            )
+
+            link = f"{config.PUBLIC_BASE_URL}/admin?magic={token}"
+            send_email(
+                email,
+                f"Your login link for {row['name']}",
+                f"Hi!\n\nClick the link below to log into your {row['name']} dashboard:\n\n"
+                f"{link}\n\n"
+                f"This link expires in 30 minutes and can only be used once.\n\n"
+                f"If you didn't request this, you can safely ignore this email.",
+            )
+
+    # Always return ok — don't reveal whether the email exists
+    return {"ok": True}
+
+
+@router.post("/magic-link/verify")
+def verify_magic_link(body: dict = Body(...)):
+    """Verify a magic link token and return admin credentials."""
+    token = (body.get("token") or "").strip()
+    if not token:
+        raise HTTPException(status_code=422, detail="Token is required")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    with get_db() as db:
+        row = db.execute(
+            """SELECT ml.id, ml.restaurant_id, r.id as rid, r.name, r.slug, r.admin_token
+               FROM magic_links ml
+               JOIN restaurants r ON r.id = ml.restaurant_id
+               WHERE ml.token = ? AND ml.used = 0 AND ml.expires_at > ?""",
+            (token, now),
+        ).fetchone()
+
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or expired link")
+
+        db.execute("UPDATE magic_links SET used = 1 WHERE id = ?", (row["id"],))
+
+    return {
+        "restaurant_id": row["rid"],
+        "name": row["name"],
+        "slug": row["slug"],
+        "admin_token": row["admin_token"],
+    }
 
 
 # --- Dashboard stats ---
@@ -108,7 +176,7 @@ def get_admin_restaurant(authorization: str = Header(...)):
         row = db.execute(
             "SELECT id, name, slug, address, cuisine_type, about_text, banner_text, latitude, longitude, "
             "logo_url, banner_url, instagram_handle, facebook_handle, phone, whatsapp_number, "
-            "owner_email, theme, deliveroo_url, justeat_url, is_active, opening_hours, "
+            "mobile_number, notification_channel, owner_email, theme, deliveroo_url, justeat_url, is_active, opening_hours, "
             "status, preview_password "
             "FROM restaurants WHERE id = ?",
             (restaurant["id"],),
@@ -119,6 +187,14 @@ def get_admin_restaurant(authorization: str = Header(...)):
     if out.get("opening_hours"):
         try:
             out["opening_hours"] = json.loads(out["opening_hours"])
+            # Handle double-encoded JSON (e.g. "\"{...}\"")
+            if isinstance(out["opening_hours"], str):
+                try:
+                    hours2 = json.loads(out["opening_hours"])
+                    if isinstance(hours2, dict):
+                        out["opening_hours"] = hours2
+                except (TypeError, json.JSONDecodeError):
+                    out["opening_hours"] = None
         except (TypeError, json.JSONDecodeError):
             out["opening_hours"] = None
     return out
@@ -151,12 +227,19 @@ def update_admin_restaurant(body: RestaurantUpdate, authorization: str = Header(
         updates["facebook_handle"] = body.facebook_handle
     if body.phone is not None:
         updates["phone"] = body.phone
-    if body.whatsapp_number is not None:
-        updates["whatsapp_number"] = body.whatsapp_number
+    whatsapp_number = getattr(body, "whatsapp_number", None)
+    if whatsapp_number is not None:
+        updates["whatsapp_number"] = whatsapp_number
+        updates["mobile_number"] = whatsapp_number
+    if body.mobile_number is not None:
+        updates["mobile_number"] = body.mobile_number
+        updates.setdefault("whatsapp_number", body.mobile_number)
+    if body.notification_channel is not None:
+        updates["notification_channel"] = (body.notification_channel or "").strip().lower()
     if body.owner_email is not None:
         updates["owner_email"] = body.owner_email
     if body.theme is not None:
-        updates["theme"] = body.theme
+        updates["theme"] = (body.theme or "").strip().lower() or "modern"
     if body.deliveroo_url is not None:
         updates["deliveroo_url"] = body.deliveroo_url
     if body.justeat_url is not None:
