@@ -130,7 +130,7 @@ def create_order(data: dict) -> dict:
 
         # Fetch restaurant info for response
         restaurant = db.execute(
-            "SELECT name FROM restaurants WHERE id = ?", (data["restaurant_id"],)
+            "SELECT name, slug FROM restaurants WHERE id = ?", (data["restaurant_id"],)
         ).fetchone()
 
     return {
@@ -138,6 +138,7 @@ def create_order(data: dict) -> dict:
         "order_number": order_number,
         "restaurant_id": data["restaurant_id"],
         "restaurant_name": restaurant["name"] if restaurant else "",
+        "restaurant_slug": restaurant["slug"] if restaurant else "",
         "customer_name": data["customer_name"],
         "customer_phone": data["customer_phone"],
         "customer_email": data.get("customer_email"),
@@ -188,7 +189,7 @@ def advance_order_status(order_id: int, new_status: str, restaurant_id: int) -> 
         updated = db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
         items = db.execute("SELECT * FROM order_items WHERE order_id = ?", (order_id,)).fetchall()
         restaurant = db.execute(
-            "SELECT name FROM restaurants WHERE id = ?", (restaurant_id,)
+            "SELECT name, slug FROM restaurants WHERE id = ?", (restaurant_id,)
         ).fetchone()
 
     return {
@@ -196,6 +197,7 @@ def advance_order_status(order_id: int, new_status: str, restaurant_id: int) -> 
         "order_number": updated["order_number"],
         "restaurant_id": updated["restaurant_id"],
         "restaurant_name": restaurant["name"] if restaurant else "",
+        "restaurant_slug": restaurant["slug"] if restaurant else "",
         "customer_name": updated["customer_name"],
         "customer_phone": updated["customer_phone"],
         "customer_email": updated["customer_email"],

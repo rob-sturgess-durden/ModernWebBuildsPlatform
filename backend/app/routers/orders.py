@@ -161,7 +161,7 @@ def get_order_status(order_number: str):
         ).fetchall()
 
         restaurant = db.execute(
-            "SELECT name FROM restaurants WHERE id = ?", (order["restaurant_id"],)
+            "SELECT name, slug FROM restaurants WHERE id = ?", (order["restaurant_id"],)
         ).fetchone()
 
     wa_from = config.TWILIO_WHATSAPP_FROM if config.WHATSAPP_ENABLED else None
@@ -171,6 +171,7 @@ def get_order_status(order_number: str):
         order_number=order["order_number"],
         restaurant_id=order["restaurant_id"],
         restaurant_name=restaurant["name"] if restaurant else "",
+        restaurant_slug=restaurant["slug"] if restaurant else "",
         customer_name=order["customer_name"],
         customer_phone=order["customer_phone"],
         customer_email=order["customer_email"],
@@ -181,6 +182,7 @@ def get_order_status(order_number: str):
         items=[
             {
                 "id": i["id"],
+                "menu_item_id": i["menu_item_id"],
                 "item_name": i["item_name"],
                 "quantity": i["quantity"],
                 "unit_price": i["unit_price"],

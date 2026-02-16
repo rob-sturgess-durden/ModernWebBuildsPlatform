@@ -23,6 +23,22 @@ export default function OrderStatusPage() {
     return () => clearInterval(interval);
   }, [orderNumber]);
 
+  // Save last order to localStorage for reorder feature
+  useEffect(() => {
+    if (!order || !order.items?.length) return;
+    try {
+      localStorage.setItem("forkit_last_order", JSON.stringify({
+        restaurant_id: order.restaurant_id,
+        restaurant_slug: order.restaurant_slug || "",
+        restaurant_name: order.restaurant_name || "",
+        items: order.items.map((i) => ({ id: i.menu_item_id, name: i.item_name, price: i.unit_price, quantity: i.quantity })),
+        subtotal: order.subtotal,
+        order_number: order.order_number,
+        created_at: order.created_at,
+      }));
+    } catch { /* ignore */ }
+  }, [order]);
+
   if (loading) return <div className="loading">Loading order...</div>;
   if (error) return <div className="error">{error}</div>;
   if (!order) return <div className="error">Order not found</div>;

@@ -27,6 +27,28 @@ export default function RestaurantPage() {
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState(false);
   const [activeCategory, setActiveCategory] = useState(null);
+  const [lastOrder, setLastOrder] = useState(null);
+
+  // Load last order for reorder feature
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("forkit_last_order");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.restaurant_slug === slug && parsed?.items?.length) {
+        setLastOrder(parsed);
+      }
+    } catch { /* ignore */ }
+  }, [slug]);
+
+  const handleReorder = () => {
+    if (!lastOrder?.items?.length || !restaurant) return;
+    lastOrder.items.forEach((item) => {
+      for (let i = 0; i < item.quantity; i++) {
+        addItem({ id: item.id, name: item.name, price: item.price }, restaurant.id, restaurant.slug);
+      }
+    });
+  };
 
   const loadRestaurant = (pw = null) => {
     setLoading(true);
@@ -244,6 +266,24 @@ export default function RestaurantPage() {
 
             <div className="restaurant-layout__sidebar">
               <div className="restaurant-layout__sidebar-inner">
+                {lastOrder && (
+                  <div className="hero-card" style={{ padding: "1rem 1.25rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <i className="fas fa-redo" style={{ color: "var(--accent)", fontSize: "0.9rem" }} />
+                      <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>Your last order</span>
+                    </div>
+                    <p style={{ margin: "0 0 10px", color: "var(--text-light)", fontSize: "0.85rem" }}>
+                      {lastOrder.items.reduce((s, i) => s + i.quantity, 0)} items &middot; £{lastOrder.subtotal.toFixed(2)}
+                    </p>
+                    <button
+                      className="btn btn-olive btn-pill btn-sm"
+                      style={{ width: "100%" }}
+                      onClick={handleReorder}
+                    >
+                      Reorder
+                    </button>
+                  </div>
+                )}
                 <Basket onCheckout={() => { setCheckout(true); window.scrollTo(0, 0); }} />
                 <div className="contact-card">
                   <p className="meta-title">Find us</p>

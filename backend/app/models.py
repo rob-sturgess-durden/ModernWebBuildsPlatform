@@ -173,6 +173,7 @@ class OrderCreate(BaseModel):
 
 class OrderItemResponse(BaseModel):
     id: int
+    menu_item_id: int = 0
     item_name: str
     quantity: int
     unit_price: float
@@ -183,6 +184,7 @@ class OrderResponse(BaseModel):
     order_number: str
     restaurant_id: int
     restaurant_name: str
+    restaurant_slug: str = ""
     customer_name: str
     customer_phone: str
     customer_email: Optional[str] = None

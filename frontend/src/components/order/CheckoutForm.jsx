@@ -130,25 +130,17 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState(null);
 
-  const cookieGet = (name) => {
-    const m = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[$()*+.?[\\]^{|}]/g, "\\$&")}=([^;]*)`));
-    return m ? decodeURIComponent(m[1]) : "";
-  };
-
-  const cookieSet = (name, value, days = 90) => {
-    const d = new Date();
-    d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; SameSite=Lax`;
-  };
-
-  const cookieDel = (name) => {
-    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+  const stripPhonePrefix = (phone) => {
+    let s = String(phone || "");
+    if (s.startsWith("+44")) s = s.slice(3);
+    else if (s.startsWith("44") && s.length > 10) s = s.slice(2);
+    if (s.startsWith("0")) s = s.slice(1);
+    return s;
   };
 
   const normalizePhone = (raw) => {
     const digits = String(raw || "").replace(/\D/g, "");
     if (!digits) return "";
-    // Strip leading 0 or 44 if user pasted a full number
     if (digits.startsWith("44") && digits.length > 10) return `+${digits}`;
     if (digits.startsWith("0") && digits.length === 11) return `+44${digits.slice(1)}`;
     return `+44${digits}`;
@@ -156,24 +148,20 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
 
   useEffect(() => {
     try {
-      const raw = cookieGet("forkit_customer");
+      const raw = localStorage.getItem("forkit_customer");
       if (!raw) return;
-      const parsed = JSON.parse(atob(raw));
+      const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") return;
-      // Strip +44 prefix from stored phone so input shows local part only
-      let savedPhone = typeof parsed.phone === "string" ? parsed.phone : "";
-      if (savedPhone.startsWith("+44")) savedPhone = savedPhone.slice(3);
-      if (savedPhone.startsWith("44") && savedPhone.length > 10) savedPhone = savedPhone.slice(2);
-      if (savedPhone.startsWith("0")) savedPhone = savedPhone.slice(1);
       setForm((f) => ({
         ...f,
-        customer_name: typeof parsed.name === "string" ? parsed.name : f.customer_name,
-        customer_phone: savedPhone || f.customer_phone,
-        customer_email: typeof parsed.email === "string" ? parsed.email : f.customer_email,
+        customer_name: parsed.name || f.customer_name,
+        customer_phone: stripPhonePrefix(parsed.phone) || f.customer_phone,
+        customer_email: parsed.email || f.customer_email,
       }));
       setDealsOptIn(!!parsed.deals_optin);
+      if (parsed.verified) setVerified(true);
     } catch {
-      // ignore cookie parse issues
+      // ignore
     }
   }, []);
 
@@ -259,18 +247,16 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
       // Remember details for next time (best-effort).
       if (rememberMe) {
         try {
-          const payload = {
+          localStorage.setItem("forkit_customer", JSON.stringify({
             name: form.customer_name.trim(),
             phone: normalizedPhone,
             email: (form.customer_email || "").trim(),
+            verified: true,
             deals_optin: !!dealsOptIn,
-          };
-          cookieSet("forkit_customer", btoa(JSON.stringify(payload)), 120);
-        } catch {
-          // ignore
-        }
+          }));
+        } catch { /* ignore */ }
       } else {
-        cookieDel("forkit_customer");
+        localStorage.removeItem("forkit_customer");
       }
 
       const order = await placeOrder({
@@ -286,6 +272,19 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
           quantity: i.quantity,
         })),
       });
+
+      // Save last order for reorder feature
+      try {
+        localStorage.setItem("forkit_last_order", JSON.stringify({
+          restaurant_id: basket.restaurantId,
+          restaurant_slug: basket.restaurantSlug,
+          restaurant_name: restaurant?.name || "",
+          items: basket.items.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity })),
+          subtotal,
+          order_number: order.order_number,
+          created_at: new Date().toISOString(),
+        }));
+      } catch { /* ignore */ }
 
       // Marketing opt-in (do not block order success if it fails).
       if (dealsOptIn) {
