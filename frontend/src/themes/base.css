@@ -867,3 +867,45 @@ label {
 @media (max-width: 768px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 600px) {
+  .container { padding: 0 5px; }
+  .section { padding-left: 5px !important; padding-right: 5px !important; }
+  .menu { padding-left: 5px !important; padding-right: 5px !important; }
+}
+
+/* Floating mobile basket bar — hidden on desktop */
+.mobile-basket-bar {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-basket-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 999;
+    background: var(--accent, #E85D2A);
+    color: #fff;
+    padding: 0.85rem 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.2);
+    font-size: 1rem;
+  }
+  .mobile-basket-bar__badge {
+    background: #fff;
+    color: var(--accent, #E85D2A);
+    font-weight: 700;
+    font-size: 0.85rem;
+    min-width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

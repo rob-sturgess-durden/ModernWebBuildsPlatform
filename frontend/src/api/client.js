@@ -111,6 +111,21 @@ export function verifyCode(phone, email, code) {
   });
 }
 
+export function collectOrder(orderNumber) {
+  return request(`/orders/${orderNumber}/collect`, { method: "POST" });
+}
+
+export function submitReview(orderNumber, rating, comment = "") {
+  return request(`/orders/${orderNumber}/review`, {
+    method: "POST",
+    body: JSON.stringify({ rating, comment }),
+  });
+}
+
+export function getReview(orderNumber) {
+  return request(`/orders/${orderNumber}/review`);
+}
+
 export function marketingSignup({ restaurant_id = null, name = "", email = "", phone = "" } = {}) {
   return request("/marketing/signup", {
     method: "POST",
@@ -148,8 +163,23 @@ export function getAdminStats(token) {
   return request("/admin/stats", { headers: adminHeaders(token) });
 }
 
+export function createTopupSession(token) {
+  return request("/admin/topup", {
+    method: "POST",
+    headers: adminHeaders(token),
+  });
+}
+
 export function getAdminCustomers(token) {
   return request("/admin/customers", { headers: adminHeaders(token) });
+}
+
+export function sendCustomerMessage(token, message, recipients) {
+  return request("/admin/customers/send-message", {
+    method: "POST",
+    body: JSON.stringify({ message, recipients }),
+    headers: adminHeaders(token),
+  });
 }
 
 export function getAdminOrders(token, status = null) {

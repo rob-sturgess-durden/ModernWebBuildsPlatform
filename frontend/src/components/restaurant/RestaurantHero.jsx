@@ -34,7 +34,7 @@ export default function RestaurantHero({ restaurant }) {
           </div>
 
           <a className="powered-by" href="https://forkitt.com/" target="_blank" rel="noreferrer">
-            Powered by <strong>ForkIt</strong>
+            Powered by <strong>ForkItt</strong>
           </a>
         </div>
       </div>

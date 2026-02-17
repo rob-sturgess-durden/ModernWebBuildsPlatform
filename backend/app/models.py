@@ -24,6 +24,7 @@ class RestaurantDetail(RestaurantSummary):
     facebook_handle: Optional[str] = None
     phone: Optional[str] = None
     opening_hours: Optional[dict] = None
+    accepting_orders: bool = True
 
     @classmethod
     def from_row(cls, row):
@@ -43,6 +44,7 @@ class RestaurantDetail(RestaurantSummary):
                         pass
             except (json.JSONDecodeError, TypeError):
                 pass
+        credits = float(row["credits"] or 0) if "credits" in keys else 10.0
         return cls(
             id=row["id"],
             name=row["name"],
@@ -60,6 +62,7 @@ class RestaurantDetail(RestaurantSummary):
             phone=row["phone"],
             opening_hours=hours,
             theme=row["theme"],
+            accepting_orders=credits > 0,
         )
 
 class GalleryImage(BaseModel):
@@ -81,8 +84,12 @@ class InstagramPost(BaseModel):
 class CustomerSummary(BaseModel):
     customer_name: str
     customer_email: Optional[str] = None
+    customer_phone: Optional[str] = None
     order_count: int
     last_order_at: str
+    marketing_optin: bool = False
+    whatsapp_optin: bool = False
+    sms_optin: bool = False
 
 class MarketingSignupCreate(BaseModel):
     restaurant_id: Optional[int] = None
@@ -200,6 +207,19 @@ class OrderResponse(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str
+
+
+# --- Reviews ---
+
+class ReviewCreate(BaseModel):
+    rating: int
+    comment: str = ""
+
+class ReviewResponse(BaseModel):
+    id: int
+    rating: int
+    comment: str = ""
+    created_at: str = ""
 
 
 # --- Admin ---

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getOrderStatus } from "../api/client";
+import { getOrderStatus, collectOrder, submitReview, getReview } from "../api/client";
 import OrderStatus from "../components/order/OrderStatus";
 
 export default function OrderStatusPage() {
@@ -8,6 +8,18 @@ export default function OrderStatusPage() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Collect
+  const [collecting, setCollecting] = useState(false);
+
+  // Review
+  const [review, setReview] = useState(null);
+  const [reviewLoaded, setReviewLoaded] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   const fetchOrder = () => {
     getOrderStatus(orderNumber)
@@ -18,7 +30,6 @@ export default function OrderStatusPage() {
 
   useEffect(() => {
     fetchOrder();
-    // Poll every 30 seconds for status updates
     const interval = setInterval(fetchOrder, 30000);
     return () => clearInterval(interval);
   }, [orderNumber]);
@@ -39,6 +50,41 @@ export default function OrderStatusPage() {
     } catch { /* ignore */ }
   }, [order]);
 
+  // Fetch existing review
+  useEffect(() => {
+    if (!order) return;
+    getReview(orderNumber)
+      .then((res) => {
+        if (res.review) {
+          setReview(res.review);
+          setRating(res.review.rating);
+          setComment(res.review.comment || "");
+        }
+      })
+      .catch(() => {})
+      .finally(() => setReviewLoaded(true));
+  }, [order?.status]);
+
+  const handleCollect = async () => {
+    setCollecting(true);
+    try {
+      await collectOrder(orderNumber);
+      fetchOrder();
+    } catch { /* ignore */ }
+    setCollecting(false);
+  };
+
+  const handleSubmitReview = async () => {
+    if (rating < 1) return;
+    setSubmittingReview(true);
+    try {
+      await submitReview(orderNumber, rating, comment);
+      setReviewSubmitted(true);
+      setReview({ rating, comment });
+    } catch { /* ignore */ }
+    setSubmittingReview(false);
+  };
+
   if (loading) return <div className="loading">Loading order...</div>;
   if (error) return <div className="error">{error}</div>;
   if (!order) return <div className="error">Order not found</div>;
@@ -46,6 +92,9 @@ export default function OrderStatusPage() {
   const pickupTime = order.pickup_time
     ? new Date(order.pickup_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
     : "";
+
+  const showCollectButton = order.status === "ready";
+  const showReview = order.status === "collected" && reviewLoaded;
 
   return (
     <div className="container section">
@@ -59,6 +108,38 @@ export default function OrderStatusPage() {
         </div>
 
         <OrderStatus order={order} />
+
+        {/* Mark as Collected button */}
+        {showCollectButton && (
+          <div style={{
+            marginTop: "1.5rem",
+            padding: "1.2rem",
+            background: "#f0fdf4",
+            borderRadius: 12,
+            textAlign: "center",
+          }}>
+            <p style={{ fontWeight: 600, marginBottom: "0.6rem", color: "#166534" }}>
+              Have you picked up your order?
+            </p>
+            <button
+              className="btn"
+              onClick={handleCollect}
+              disabled={collecting}
+              style={{
+                background: "#38a169",
+                color: "#fff",
+                fontWeight: 600,
+                padding: "0.7rem 1.5rem",
+                borderRadius: 8,
+                border: "none",
+                cursor: collecting ? "wait" : "pointer",
+                fontSize: "1rem",
+              }}
+            >
+              {collecting ? "Updating..." : "\u2713 Mark as Collected"}
+            </button>
+          </div>
+        )}
 
         <div style={{ borderTop: "1px solid #eee", paddingTop: "1.5rem", marginTop: "1rem" }}>
           <h3 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "1rem" }}>Order Details</h3>
@@ -106,6 +187,96 @@ export default function OrderStatusPage() {
         <p style={{ color: "var(--text-light)", fontSize: "0.85rem", marginTop: "1rem", textAlign: "center" }}>
           Pay at the restaurant when you collect your order.
         </p>
+
+        {/* Review widget */}
+        {showReview && (
+          <div style={{
+            marginTop: "1.5rem",
+            padding: "1.2rem",
+            background: review || reviewSubmitted ? "#f0fdf4" : "#fffbeb",
+            borderRadius: 12,
+          }}>
+            {review || reviewSubmitted ? (
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontWeight: 600, marginBottom: "0.5rem", color: "#166534" }}>
+                  Thanks for your review!
+                </p>
+                <div style={{ fontSize: "1.5rem", marginBottom: "0.3rem" }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span key={star} style={{ color: star <= rating ? "#f59e0b" : "#d1d5db" }}>
+                      {"\u2605"}
+                    </span>
+                  ))}
+                </div>
+                {comment && (
+                  <p style={{ color: "var(--text-light)", fontSize: "0.9rem", margin: 0 }}>
+                    "{comment}"
+                  </p>
+                )}
+              </div>
+            ) : (
+              <>
+                <p style={{ fontWeight: 600, marginBottom: "0.6rem", textAlign: "center" }}>
+                  How was your order?
+                </p>
+                <div style={{ textAlign: "center", marginBottom: "0.75rem" }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span
+                      key={star}
+                      onClick={() => setRating(star)}
+                      onMouseEnter={() => setHoverRating(star)}
+                      onMouseLeave={() => setHoverRating(0)}
+                      style={{
+                        fontSize: "2rem",
+                        cursor: "pointer",
+                        color: star <= (hoverRating || rating) ? "#f59e0b" : "#d1d5db",
+                        transition: "color 0.15s",
+                        padding: "0 2px",
+                      }}
+                    >
+                      {"\u2605"}
+                    </span>
+                  ))}
+                </div>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Any feedback? (optional)"
+                  rows={2}
+                  style={{
+                    width: "100%",
+                    borderRadius: 8,
+                    border: "1px solid #ddd",
+                    padding: "0.6rem",
+                    fontSize: "0.9rem",
+                    resize: "vertical",
+                    marginBottom: "0.75rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ textAlign: "center" }}>
+                  <button
+                    className="btn"
+                    onClick={handleSubmitReview}
+                    disabled={submittingReview || rating < 1}
+                    style={{
+                      background: rating >= 1 ? "#f59e0b" : "#d1d5db",
+                      color: "#fff",
+                      fontWeight: 600,
+                      padding: "0.6rem 1.5rem",
+                      borderRadius: 8,
+                      border: "none",
+                      cursor: rating >= 1 ? "pointer" : "default",
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    {submittingReview ? "Submitting..." : "Submit Review"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {order.notification_whatsapp && order.status !== "collected" && order.status !== "cancelled" && (
           <div style={{

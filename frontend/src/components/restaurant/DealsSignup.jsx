@@ -161,7 +161,7 @@ export default function DealsSignup({ restaurant }) {
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <i className="fas fa-check-circle" style={{ color: "#38a169", fontSize: "1.1rem" }} />
-                  <span style={{ fontWeight: 700, fontSize: "1.05rem" }}>Registered for ForkIt</span>
+                  <span style={{ fontWeight: 700, fontSize: "1.05rem" }}>Registered for ForkItt</span>
                 </div>
                 <p style={{ margin: 0, color: "var(--text-light)", fontSize: "0.9rem" }}>
                   {savedCustomer?.name && <span>{savedCustomer.name}</span>}

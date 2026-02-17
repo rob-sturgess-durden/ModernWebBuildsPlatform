@@ -14,10 +14,12 @@ import {
   updateAdminRestaurant,
   scrapeMenuWithImport,
   getAdminCustomers,
+  sendCustomerMessage,
   getAdminStats,
   getAdminGallery,
   addGalleryImage,
   deleteGalleryImage,
+  createTopupSession,
 } from "../api/client";
 
 const STATUS_TABS = ["all", "pending", "confirmed", "ready", "collected", "cancelled"];
@@ -173,6 +175,20 @@ export default function AdminDashboard() {
   const [galleryFile, setGalleryFile] = useState(null);
   const [galleryCaption, setGalleryCaption] = useState("");
   const [galleryUploading, setGalleryUploading] = useState(false);
+
+  // Topup success message
+  const [topupMsg, setTopupMsg] = useState(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("topup") === "success") {
+      setTopupMsg("Payment received! Your credits have been topped up.");
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("topup") === "cancel") {
+      setTopupMsg(null);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -549,6 +565,23 @@ export default function AdminDashboard() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      {topupMsg && (
+        <div style={{
+          background: "#f0fdf4",
+          border: "1px solid #bbf7d0",
+          borderRadius: 12,
+          padding: "1rem 1.5rem",
+          marginBottom: "1rem",
+          color: "#166534",
+          fontWeight: 600,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}>
+          <span><i className="fas fa-check-circle" style={{ marginRight: 8 }} />{topupMsg}</span>
+          <button onClick={() => setTopupMsg(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontSize: "1.1rem" }}>&times;</button>
+        </div>
+      )}
 
       {/* Dashboard tab */}
       {tab === "dashboard" && (
@@ -557,6 +590,21 @@ export default function AdminDashboard() {
             <div className="loading">Loading stats...</div>
           ) : (
             <>
+              {stats.credits != null && stats.credits <= 0 && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: 12,
+                  padding: "1rem 1.5rem",
+                  marginBottom: "1.5rem",
+                  color: "#991b1b",
+                  fontWeight: 600,
+                  textAlign: "center",
+                }}>
+                  <i className="fas fa-exclamation-triangle" style={{ marginRight: 8 }} />
+                  Your credit balance is zero. Online ordering is paused until credits are topped up.
+                </div>
+              )}
               <div className="stats-grid">
                 <div className="stat-card">
                   <p className="stat-label">Today</p>
@@ -577,6 +625,29 @@ export default function AdminDashboard() {
                         View
                       </button>
                     ) : "all clear"}
+                  </p>
+                </div>
+                <div className="stat-card" style={stats.credits != null && stats.credits <= 0 ? { borderColor: "#fecaca", background: "#fef2f2" } : {}}>
+                  <p className="stat-label">Credits</p>
+                  <p className="stat-value" style={stats.credits != null && stats.credits <= 0 ? { color: "#dc2626" } : { color: "#16a34a" }}>
+                    &pound;{(stats.credits ?? 0).toFixed(2)}
+                  </p>
+                  <p className="stat-sub">
+                    <button
+                      className="btn btn-sm"
+                      style={{ background: "#6366f1", color: "#fff", fontWeight: 600, padding: "0.25rem 0.75rem", borderRadius: 6, border: "none", cursor: "pointer", fontSize: "0.8rem" }}
+                      onClick={async () => {
+                        try {
+                          const res = await createTopupSession(token);
+                          if (res.url) window.location.href = res.url;
+                        } catch (e) {
+                          alert(e.message || "Failed to create top-up session");
+                        }
+                      }}
+                    >
+                      <i className="fas fa-plus" style={{ marginRight: 4 }} />
+                      Top Up &pound;10
+                    </button>
                   </p>
                 </div>
                 <div className="stat-card">
@@ -621,16 +692,40 @@ export default function AdminDashboard() {
       {/* Orders tab */}
       {tab === "orders" && (
         <div>
-          <div style={{ display: "flex", gap: "0.3rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-            {STATUS_TABS.map((s) => (
-              <button
-                key={s}
-                className={`btn btn-sm ${statusFilter === s ? "btn-secondary" : "btn-outline"}`}
-                onClick={() => setStatusFilter(s)}
-              >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-            ))}
+          <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+            {STATUS_TABS.map((s) => {
+              const tabConf = {
+                all: { icon: "fas fa-list", color: "#475569", bg: "#f1f5f9" },
+                pending: { icon: "fas fa-clock", color: "#92400e", bg: "#fef3c7" },
+                confirmed: { icon: "fas fa-check-circle", color: "#1e40af", bg: "#dbeafe" },
+                ready: { icon: "fas fa-concierge-bell", color: "#166534", bg: "#dcfce7" },
+                collected: { icon: "fas fa-shopping-bag", color: "#7c3aed", bg: "#ede9fe" },
+                cancelled: { icon: "fas fa-ban", color: "#991b1b", bg: "#fee2e2" },
+              }[s] || { icon: "fas fa-circle", color: "#666", bg: "#eee" };
+              const active = statusFilter === s;
+              return (
+                <button
+                  key={s}
+                  className="btn btn-sm"
+                  style={{
+                    background: active ? tabConf.color : tabConf.bg,
+                    color: active ? "#fff" : tabConf.color,
+                    border: `1.5px solid ${tabConf.color}`,
+                    fontWeight: 600,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    borderRadius: 20,
+                    padding: "0.4rem 0.8rem",
+                    fontSize: "0.8rem",
+                  }}
+                  onClick={() => setStatusFilter(s)}
+                >
+                  <i className={tabConf.icon} style={{ fontSize: "0.7rem" }} />
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              );
+            })}
           </div>
 
           {loading ? (
@@ -1000,50 +1095,42 @@ export default function AdminDashboard() {
               ))}
             </div>
           )}
+
+          {/* Promotional Flyer */}
+          <div style={{ marginTop: "2rem", padding: "1.5rem", background: "var(--bg)", borderRadius: 12, border: "1px solid var(--border, #eee)" }}>
+            <h3 style={{ marginBottom: "0.5rem", fontWeight: 600 }}>Promotional flyer</h3>
+            <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "1rem" }}>
+              Download an A5 flyer with your restaurant details, QR code, and ForkItt branding. Print and display for customers.
+            </p>
+            <button
+              className="btn btn-burnt btn-pill"
+              onClick={() => {
+                const token = localStorage.getItem("admin_token");
+                fetch(`/api/admin/flyer`, { headers: { Authorization: `Bearer ${token}` } })
+                  .then((res) => {
+                    if (!res.ok) throw new Error("Failed to generate flyer");
+                    return res.blob();
+                  })
+                  .then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `ForkItt-Flyer-${restaurantInfo?.slug || "flyer"}.png`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  })
+                  .catch(() => alert("Failed to generate flyer"));
+              }}
+            >
+              Download Flyer
+            </button>
+          </div>
         </div>
       )}
 
       {/* Customers tab */}
       {tab === "customers" && (
-        <div>
-          {loading ? (
-            <div className="loading">Loading customers...</div>
-          ) : customers.length === 0 ? (
-            <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>
-              No customers yet. Customers appear here once they place an order.
-            </p>
-          ) : (
-            <>
-              <p style={{ color: "var(--text-light)", marginBottom: "1.2rem" }}>
-                {customers.length} registered customer{customers.length !== 1 ? "s" : ""}
-              </p>
-              <div style={{ overflowX: "auto" }}>
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Orders</th>
-                      <th>Last order</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customers.map((c, i) => (
-                      <tr key={i}>
-                        <td style={{ fontWeight: 600 }}>{c.customer_name}</td>
-                        <td style={{ color: "var(--text-light)" }}>{c.customer_email || "—"}</td>
-                        <td>{c.order_count}</td>
-                        <td style={{ color: "var(--text-light)" }}>
-                          {new Date(c.last_order_at).toLocaleDateString("en-GB")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
+        <CustomerPanel customers={customers} loading={loading} token={localStorage.getItem("admin_token")} restaurantName={restaurantInfo?.name || ""} />
       )}
 
       {/* Menu tab */}
@@ -1216,16 +1303,42 @@ function OrderCard({ order, onStatusChange }) {
     : "";
 
   const actions = {
-    pending: [{ label: "Confirm", status: "confirmed", cls: "btn-success" }, { label: "Cancel", status: "cancelled", cls: "btn-danger" }],
-    confirmed: [{ label: "Mark Ready", status: "ready", cls: "btn-success" }, { label: "Cancel", status: "cancelled", cls: "btn-danger" }],
-    ready: [{ label: "Collected", status: "collected", cls: "btn-success" }],
+    pending: [
+      { label: "Confirm", status: "confirmed", icon: "fas fa-check", bg: "#2563eb", color: "#fff" },
+      { label: "Cancel", status: "cancelled", icon: "fas fa-times", bg: "#dc2626", color: "#fff" },
+    ],
+    confirmed: [
+      { label: "Mark Ready", status: "ready", icon: "fas fa-concierge-bell", bg: "#16a34a", color: "#fff" },
+      { label: "Cancel", status: "cancelled", icon: "fas fa-times", bg: "#dc2626", color: "#fff" },
+    ],
+    ready: [
+      { label: "Collected", status: "collected", icon: "fas fa-shopping-bag", bg: "#7c3aed", color: "#fff" },
+    ],
   };
 
+  const statusConfig = {
+    pending: { icon: "fas fa-clock", color: "#92400e", bg: "#fef3c7", text: "Pending" },
+    confirmed: { icon: "fas fa-check-circle", color: "#1e40af", bg: "#dbeafe", text: "Confirmed" },
+    ready: { icon: "fas fa-concierge-bell", color: "#166534", bg: "#dcfce7", text: "Ready" },
+    collected: { icon: "fas fa-shopping-bag", color: "#7c3aed", bg: "#ede9fe", text: "Collected" },
+    cancelled: { icon: "fas fa-ban", color: "#991b1b", bg: "#fee2e2", text: "Cancelled" },
+  };
+
+  const sc = statusConfig[order.status] || statusConfig.pending;
+
   return (
-    <div className="card">
+    <div className="card" style={{ borderLeft: `4px solid ${sc.color}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
         <h4 style={{ fontWeight: 700 }}>{order.order_number}</h4>
-        <span className={`badge status-${order.status}`}>{order.status}</span>
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "0.3rem 0.7rem", borderRadius: 20,
+          background: sc.bg, color: sc.color,
+          fontSize: "0.8rem", fontWeight: 600,
+        }}>
+          <i className={sc.icon} style={{ fontSize: "0.75rem" }} />
+          {sc.text}
+        </span>
       </div>
 
       <div style={{ marginBottom: "0.8rem" }}>
@@ -1253,18 +1366,244 @@ function OrderCard({ order, onStatusChange }) {
       )}
 
       {actions[order.status] && (
-        <div style={{ display: "flex", gap: "0.3rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
           {actions[order.status].map((a) => (
             <button
               key={a.status}
-              className={`btn btn-sm ${a.cls}`}
+              className="btn btn-sm"
+              style={{
+                background: a.bg,
+                color: a.color,
+                border: "none",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.5rem 1rem",
+                borderRadius: 8,
+                flex: 1,
+                justifyContent: "center",
+              }}
               onClick={() => onStatusChange(order.id, a.status)}
             >
+              <i className={a.icon} style={{ fontSize: "0.8rem" }} />
               {a.label}
             </button>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+
+function CustomerPanel({ customers, loading, token, restaurantName }) {
+  const [selected, setSelected] = useState(new Set());
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+  const [showCompose, setShowCompose] = useState(false);
+
+  const optedIn = customers.filter((c) => c.marketing_optin);
+  const selectAll = () => setSelected(new Set(optedIn.map((c) => customers.indexOf(c))));
+  const selectNone = () => setSelected(new Set());
+
+  const toggleSelect = (i) => {
+    const s = new Set(selected);
+    s.has(i) ? s.delete(i) : s.add(i);
+    setSelected(s);
+  };
+
+  const getChannels = (c) => {
+    const ch = [];
+    if (c.whatsapp_optin && c.customer_phone) ch.push("whatsapp");
+    if (c.sms_optin && c.customer_phone) ch.push("sms");
+    if (c.customer_email) ch.push("email");
+    return ch;
+  };
+
+  // Estimate credit cost for the current selection
+  const estimatedCost = [...selected].reduce((total, i) => {
+    const ch = getChannels(customers[i]);
+    let cost = 0;
+    if (ch.includes("whatsapp")) cost += 0.1;
+    if (ch.includes("sms")) cost += 0.1;
+    if (ch.includes("email")) cost += 0.01;
+    return total + cost;
+  }, 0);
+
+  const templates = [
+    { label: "Weekend special", text: `Hi! This weekend at ${restaurantName} we have a special offer just for you. Order online and enjoy 10% off your next Click & Collect order! Visit us now.` },
+    { label: "New menu items", text: `Great news from ${restaurantName}! We've added exciting new dishes to our menu. Be one of the first to try them — order online for Click & Collect today!` },
+    { label: "Thank you + reorder", text: `Thanks for being a loyal customer of ${restaurantName}! We'd love to see you again. Place your next Click & Collect order online — quick, easy, and ready when you arrive.` },
+    { label: "Holiday/Event", text: `${restaurantName} is ready for the weekend! Treat yourself to a delicious meal — order ahead for Click & Collect and skip the wait.` },
+  ];
+
+  const handleSend = async () => {
+    if (!message.trim() || selected.size === 0) return;
+    setSending(true);
+    setSendResult(null);
+    try {
+      const recipients = [...selected].map((i) => {
+        const c = customers[i];
+        return { phone: c.customer_phone, email: c.customer_email, channels: getChannels(c) };
+      });
+      const res = await sendCustomerMessage(token, message, recipients);
+      setSendResult(`Message sent to ${res.sent} channel${res.sent !== 1 ? "s" : ""}`);
+      setMessage("");
+      setSelected(new Set());
+      setShowCompose(false);
+    } catch (e) {
+      setSendResult(`Error: ${e.message}`);
+    }
+    setSending(false);
+  };
+
+  if (loading) return <div className="loading">Loading customers...</div>;
+  if (customers.length === 0)
+    return (
+      <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>
+        No customers yet. Customers appear here once they place an order.
+      </p>
+    );
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem", flexWrap: "wrap", gap: "0.5rem" }}>
+        <p style={{ color: "var(--text-light)", margin: 0 }}>
+          {customers.length} customer{customers.length !== 1 ? "s" : ""} &middot; {optedIn.length} opted in
+        </p>
+        {!showCompose && optedIn.length > 0 && (
+          <button className="btn btn-sm btn-burnt btn-pill" onClick={() => { setShowCompose(true); selectAll(); }}>
+            <i className="fas fa-paper-plane" style={{ marginRight: 4 }} /> Message opted-in
+          </button>
+        )}
+      </div>
+
+      {showCompose && (
+        <div className="card" style={{ marginBottom: "1.5rem", border: "2px solid var(--accent)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
+            <h4 style={{ fontWeight: 700, margin: 0 }}>
+              <i className="fas fa-bullhorn" style={{ color: "var(--accent)", marginRight: 6 }} />
+              Send message to {selected.size} customer{selected.size !== 1 ? "s" : ""}
+            </h4>
+            <button className="btn btn-sm btn-secondary" onClick={() => { setShowCompose(false); selectNone(); }}>Cancel</button>
+          </div>
+          <p style={{ fontSize: "0.85rem", color: "var(--text-light)", marginBottom: "0.8rem" }}>
+            Each customer will be contacted via their available channels (WhatsApp, SMS, or email).
+          </p>
+          <div style={{ marginBottom: "0.8rem" }}>
+            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-light)", marginBottom: 6 }}>Quick templates:</p>
+            <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+              {templates.map((t, idx) => (
+                <button
+                  key={idx}
+                  className="btn btn-sm btn-secondary"
+                  style={{ fontSize: "0.78rem", padding: "0.25rem 0.6rem", borderRadius: 6 }}
+                  onClick={() => setMessage(t.text)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Type your message..."
+            rows={3}
+            style={{ width: "100%", borderRadius: 8, border: "1px solid #ddd", padding: "0.7rem", fontSize: "0.95rem", marginBottom: "0.8rem", boxSizing: "border-box", resize: "vertical" }}
+          />
+          {selected.size > 0 && estimatedCost > 0 && (
+            <p style={{ fontSize: "0.85rem", color: "#6366f1", fontWeight: 600, marginBottom: "0.6rem" }}>
+              <i className="fas fa-coins" style={{ marginRight: 4 }} />
+              Estimated cost: {estimatedCost.toFixed(2)} credits ({[...selected].reduce((a, i) => {
+                const ch = getChannels(customers[i]);
+                return a + ch.filter(c => c === "whatsapp" || c === "sms").length;
+              }, 0)} SMS/WhatsApp at 0.1 each, {[...selected].reduce((a, i) => {
+                const ch = getChannels(customers[i]);
+                return a + ch.filter(c => c === "email").length;
+              }, 0)} emails at 0.01 each)
+            </p>
+          )}
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              className="btn btn-sm btn-burnt btn-pill"
+              onClick={handleSend}
+              disabled={sending || !message.trim() || selected.size === 0}
+              style={{ fontWeight: 600 }}
+            >
+              {sending ? "Sending..." : `Send to ${selected.size} customer${selected.size !== 1 ? "s" : ""}`}
+            </button>
+            <button className="btn btn-sm btn-secondary" onClick={selectAll}>Select all opted-in</button>
+            <button className="btn btn-sm btn-secondary" onClick={selectNone}>Clear selection</button>
+          </div>
+          {sendResult && (
+            <p style={{ marginTop: "0.8rem", fontWeight: 600, color: sendResult.startsWith("Error") ? "#dc2626" : "#16a34a" }}>
+              {sendResult}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div style={{ overflowX: "auto" }}>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              {showCompose && <th style={{ width: 36 }}></th>}
+              <th>Name</th>
+              <th>Mobile</th>
+              <th>Email</th>
+              <th style={{ textAlign: "center" }}>Opted in</th>
+              <th style={{ textAlign: "center" }}>Channels</th>
+              <th>Orders</th>
+              <th>Last order</th>
+            </tr>
+          </thead>
+          <tbody>
+            {customers.map((c, i) => {
+              const channels = getChannels(c);
+              return (
+                <tr key={i} style={selected.has(i) ? { background: "#fef3c7" } : {}}>
+                  {showCompose && (
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(i)}
+                        onChange={() => toggleSelect(i)}
+                        disabled={!c.marketing_optin}
+                        style={{ width: "auto", margin: 0, cursor: c.marketing_optin ? "pointer" : "default" }}
+                      />
+                    </td>
+                  )}
+                  <td style={{ fontWeight: 600 }}>{c.customer_name}</td>
+                  <td style={{ color: "var(--text-light)", fontSize: "0.85rem", whiteSpace: "nowrap" }}>{c.customer_phone || "—"}</td>
+                  <td style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>{c.customer_email || "—"}</td>
+                  <td style={{ textAlign: "center" }}>
+                    {c.marketing_optin ? (
+                      <i className="fas fa-check-circle" style={{ color: "#16a34a" }} title="Marketing opted in" />
+                    ) : (
+                      <span style={{ color: "#d1d5db" }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: "center" }}>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+                      {c.whatsapp_optin && <i className="fab fa-whatsapp" style={{ color: "#25D366", fontSize: "1rem" }} title="WhatsApp" />}
+                      {c.sms_optin && <i className="fas fa-sms" style={{ color: "#2563eb", fontSize: "0.9rem" }} title="SMS" />}
+                      {c.customer_email && <i className="fas fa-envelope" style={{ color: "#6b7280", fontSize: "0.85rem" }} title="Email" />}
+                      {channels.length === 0 && <span style={{ color: "#d1d5db" }}>—</span>}
+                    </div>
+                  </td>
+                  <td>{c.order_count}</td>
+                  <td style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
+                    {new Date(c.last_order_at).toLocaleDateString("en-GB")}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

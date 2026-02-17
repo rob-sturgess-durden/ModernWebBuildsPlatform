@@ -205,6 +205,33 @@ def init_db():
                 used INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL UNIQUE,
+                restaurant_id INTEGER NOT NULL,
+                customer_name TEXT,
+                rating INTEGER NOT NULL,
+                comment TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (order_id) REFERENCES orders(id),
+                FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_reviews_restaurant ON reviews(restaurant_id);
+            CREATE INDEX IF NOT EXISTS idx_reviews_order ON reviews(order_id);
+
+            CREATE TABLE IF NOT EXISTS credit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                restaurant_id INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                reason TEXT,
+                balance_after REAL NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_credit_log_restaurant ON credit_log(restaurant_id);
         """)
 
         # Lightweight migrations for existing SQLite files.
@@ -242,8 +269,14 @@ def init_db():
         if "notification_channel" not in restaurant_columns:
             db.execute("ALTER TABLE restaurants ADD COLUMN notification_channel TEXT DEFAULT 'whatsapp'")
 
+        if "credits" not in restaurant_columns:
+            db.execute("ALTER TABLE restaurants ADD COLUMN credits REAL DEFAULT 10.0")
+            db.execute("UPDATE restaurants SET credits = 10.0 WHERE credits IS NULL")
+
         if "sms_optin" not in order_columns:
             db.execute("ALTER TABLE orders ADD COLUMN sms_optin INTEGER DEFAULT 0")
+        if "followup_sent" not in order_columns:
+            db.execute("ALTER TABLE orders ADD COLUMN followup_sent INTEGER DEFAULT 0")
 
         # Indexes that depend on migrated columns must be created after migrations.
         db.execute("CREATE INDEX IF NOT EXISTS idx_restaurants_google_place_id ON restaurants(google_place_id)")

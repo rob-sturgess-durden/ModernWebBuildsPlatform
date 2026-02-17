@@ -78,6 +78,10 @@ def generate_order_number(restaurant_id: int) -> str:
 
 def create_order(data: dict) -> dict:
     """Create a new order and return it."""
+    from .credits import has_credits
+    if not has_credits(data["restaurant_id"]):
+        raise ValueError("This restaurant is not currently accepting orders")
+
     order_number = generate_order_number(data["restaurant_id"])
     owner_action_token = secrets.token_urlsafe(24)
     data["customer_phone"] = normalize_phone(data.get("customer_phone"))
@@ -184,6 +188,12 @@ def advance_order_status(order_id: int, new_status: str, restaurant_id: int) -> 
             "UPDATE orders SET status = ?, status_changed_at = CURRENT_TIMESTAMP WHERE id = ?",
             (new_status, order_id),
         )
+
+        # Deduct commission when order is collected (10% of subtotal)
+        if new_status == "collected":
+            from .credits import deduct_credits
+            commission = round(order["subtotal"] * 0.10, 2)
+            deduct_credits(restaurant_id, commission, "commission")
 
         # Fetch updated order with items
         updated = db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()

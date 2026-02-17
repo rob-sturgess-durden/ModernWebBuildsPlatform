@@ -8,9 +8,9 @@ export default function Header() {
     <header className="site-header">
       <div className="container">
         <Link to="/restaurants" className="brand">
-          <img src="/forkit-logo.svg" alt="ForkIt" className="brand-logo" />
+          <img src="/forkit-logo.svg" alt="ForkItt" className="brand-logo" />
           <div>
-            <p className="brand-name">ForkIt</p>
+            <p className="brand-name">ForkItt</p>
             <p className="brand-tag">Local Restaurants • Click &amp; Collect</p>
           </div>
         </Link>

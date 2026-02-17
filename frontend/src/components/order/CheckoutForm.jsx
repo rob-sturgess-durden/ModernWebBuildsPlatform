@@ -116,6 +116,7 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
     pickup_time: "",
     special_instructions: "",
     sms_optin: false,
+    whatsapp_optin: false,
   });
   const [rememberMe, setRememberMe] = useState(true);
   const [dealsOptIn, setDealsOptIn] = useState(false);
@@ -296,6 +297,13 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
         }).catch(() => {});
       }
 
+      // Open WhatsApp opt-in link if selected
+      if (form.whatsapp_optin && order.notification_whatsapp) {
+        const waNum = order.notification_whatsapp.replace("+", "");
+        const waMsg = encodeURIComponent(`Hi! Please send me WhatsApp updates for my order ${order.order_number}. Thanks!`);
+        window.open(`https://wa.me/${waNum}?text=${waMsg}`, "_blank");
+      }
+
       clearBasket();
       onSuccess(order);
     } catch (err) {
@@ -379,10 +387,31 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
             <input
               type="checkbox"
               checked={form.sms_optin}
-              onChange={(e) => setForm({ ...form, sms_optin: e.target.checked })}
+              onChange={(e) => setForm({ ...form, sms_optin: e.target.checked, ...(e.target.checked ? { whatsapp_optin: false } : {}) })}
               style={{ width: "auto", margin: 0 }}
             />
             Notify me by SMS when my order is updated
+          </label>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginTop: "0.5rem",
+              fontSize: "0.85rem",
+              color: "var(--text-light)",
+              cursor: "pointer",
+              fontWeight: 400,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={form.whatsapp_optin}
+              onChange={(e) => setForm({ ...form, whatsapp_optin: e.target.checked, ...(e.target.checked ? { sms_optin: false } : {}) })}
+              style={{ width: "auto", margin: 0 }}
+            />
+            <i className="fab fa-whatsapp" style={{ color: "#25D366", fontSize: "1rem" }} />
+            Get order updates on WhatsApp
           </label>
         </div>
 

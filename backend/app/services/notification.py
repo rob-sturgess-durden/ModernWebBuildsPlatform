@@ -98,7 +98,7 @@ def _store_message(
         pass
 
 
-def send_whatsapp(to_number: str, message: str) -> bool:
+def send_whatsapp(to_number: str, message: str, restaurant_id: int | None = None) -> bool:
     """Send a WhatsApp message via Twilio. Returns True on success."""
     if not config.WHATSAPP_ENABLED:
         return False
@@ -128,6 +128,9 @@ def send_whatsapp(to_number: str, message: str) -> bool:
             meta={"sid": getattr(msg, "sid", None)},
         )
         logger.info("WhatsApp queued to %s (sid=%s)", to_number, getattr(msg, "sid", None))
+        if restaurant_id:
+            from .credits import deduct_credits
+            deduct_credits(restaurant_id, 0.1, "whatsapp")
         return True
     except Exception as e:
         code = getattr(e, "code", None)
@@ -149,7 +152,7 @@ def send_whatsapp(to_number: str, message: str) -> bool:
         return False
 
 
-def send_sms(to_number: str, message: str) -> bool:
+def send_sms(to_number: str, message: str, restaurant_id: int | None = None) -> bool:
     """Send an SMS via Twilio. Returns True on success."""
     if not config.SMS_ENABLED:
         return False
@@ -182,6 +185,9 @@ def send_sms(to_number: str, message: str) -> bool:
             meta={"sid": getattr(msg, "sid", None)},
         )
         logger.info("SMS queued to %s (sid=%s)", to_number, getattr(msg, "sid", None))
+        if restaurant_id:
+            from .credits import deduct_credits
+            deduct_credits(restaurant_id, 0.1, "sms")
         return True
     except Exception as e:
         code = getattr(e, "code", None)
@@ -391,7 +397,7 @@ def send_whatsapp_optin_request(to_number: str) -> bool:
     return send_whatsapp_template(to_number, config.TWILIO_OPTIN_CONTENT_SID, {})
 
 
-def send_email(to_email: str, subject: str, body: str) -> bool:
+def send_email(to_email: str, subject: str, body: str, restaurant_id: int | None = None) -> bool:
     """Send an email via SendGrid API (preferred) or SMTP fallback."""
     if config.SENDGRID_API_KEY:
         try:
@@ -410,6 +416,9 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
             response = sg.send(message)
             if 200 <= response.status_code < 300:
                 logger.info("Email sent via SendGrid to %s", to_email)
+                if restaurant_id:
+                    from .credits import deduct_credits
+                    deduct_credits(restaurant_id, 0.01, "email")
                 return True
             logger.error(
                 "SendGrid email failed to %s: status=%s body=%s",
@@ -433,6 +442,9 @@ def send_email(to_email: str, subject: str, body: str) -> bool:
             server.login(config.SMTP_USER, config.SMTP_PASSWORD)
             server.send_message(msg)
         logger.info(f"Email sent to {to_email}")
+        if restaurant_id:
+            from .credits import deduct_credits
+            deduct_credits(restaurant_id, 0.01, "email")
         return True
     except Exception as e:
         logger.error(f"Failed to send email to {to_email}: {e}")
@@ -502,7 +514,7 @@ def notify_new_order(order: dict, restaurant: dict):
         )
 
 
-def notify_customer_received(order: dict, restaurant_name: str):
+def notify_customer_received(order: dict, restaurant_name: str, restaurant_id: int | None = None):
     """Send customer a confirmation immediately after order placement."""
     subject = f"Order received: {order['order_number']} · {restaurant_name}"
     body = (
@@ -514,7 +526,7 @@ def notify_customer_received(order: dict, restaurant_name: str):
     )
 
     if order.get("customer_email"):
-        send_email(order["customer_email"], subject, body)
+        send_email(order["customer_email"], subject, body, restaurant_id=restaurant_id)
 
     phone = order.get("customer_phone") or ""
     if not phone:
@@ -522,7 +534,7 @@ def notify_customer_received(order: dict, restaurant_name: str):
 
     # WhatsApp is session-limited: only attempt if opted-in; otherwise send the opt-in template.
     if is_whatsapp_opted_in(phone):
-        ok = send_whatsapp(phone, body)
+        ok = send_whatsapp(phone, body, restaurant_id=restaurant_id)
         if not ok:
             send_whatsapp_optin_request(phone)
     else:
@@ -530,10 +542,10 @@ def notify_customer_received(order: dict, restaurant_name: str):
 
     # SMS opt-in: send confirmation if customer ticked the box.
     if order.get("sms_optin") and phone:
-        send_sms(phone, body)
+        send_sms(phone, body, restaurant_id=restaurant_id)
 
 
-def notify_customer_status(order: dict, restaurant_name: str):
+def notify_customer_status(order: dict, restaurant_name: str, restaurant_id: int | None = None):
     """Notify customer of an order status change."""
     status = order["status"]
     messages = {
@@ -557,23 +569,24 @@ def notify_customer_status(order: dict, restaurant_name: str):
 
     # Only message via WhatsApp after explicit opt-in; otherwise request opt-in first.
     if is_whatsapp_opted_in(order["customer_phone"]):
-        send_whatsapp(order["customer_phone"], message)
+        send_whatsapp(order["customer_phone"], message, restaurant_id=restaurant_id)
     else:
         send_whatsapp_optin_request(order["customer_phone"])
 
     # SMS: check the sms_optin flag stored on the order.
     if order.get("sms_optin") and order.get("customer_phone"):
-        send_sms(order["customer_phone"], message)
+        send_sms(order["customer_phone"], message, restaurant_id=restaurant_id)
 
     if order.get("customer_email"):
         send_email(
             order["customer_email"],
             f"Order {order['order_number']} - {status.title()}",
             message,
+            restaurant_id=restaurant_id,
         )
 
 
-def notify_customer_time_changed(order: dict, restaurant_name: str, note: str | None = None):
+def notify_customer_time_changed(order: dict, restaurant_name: str, note: str | None = None, restaurant_id: int | None = None):
     """Notify customer that pickup time or note has been updated by the restaurant."""
     extra = ""
     if note and str(note).strip():
@@ -588,15 +601,49 @@ def notify_customer_time_changed(order: dict, restaurant_name: str, note: str | 
     phone = order.get("customer_phone") or ""
     if phone:
         if is_whatsapp_opted_in(phone):
-            send_whatsapp(phone, message)
+            send_whatsapp(phone, message, restaurant_id=restaurant_id)
         else:
             send_whatsapp_optin_request(phone)
         if order.get("sms_optin"):
-            send_sms(phone, message)
+            send_sms(phone, message, restaurant_id=restaurant_id)
 
     if order.get("customer_email"):
         send_email(
             order["customer_email"],
             f"Pickup time updated: {order['order_number']} · {restaurant_name}",
             message,
+            restaurant_id=restaurant_id,
+        )
+
+
+def notify_followup(order: dict, restaurant_name: str, restaurant_id: int | None = None):
+    """Send a follow-up message after pickup time asking customer to confirm collection and review."""
+    link = f"{config.PUBLIC_BASE_URL}/order/{order['order_number']}"
+    status = order.get("status", "")
+
+    if status in ("confirmed", "ready"):
+        message = (
+            f"Hi {order.get('customer_name', 'there')}! "
+            f"Your order {order['order_number']} at {restaurant_name} was due for pickup.\n\n"
+            f"If you've collected it, please confirm and leave a quick review:\n{link}"
+        )
+    else:
+        message = (
+            f"Thanks for your order {order['order_number']} at {restaurant_name}!\n\n"
+            f"We'd love a quick review — it only takes a second:\n{link}"
+        )
+
+    phone = order.get("customer_phone") or ""
+    if phone:
+        if is_whatsapp_opted_in(phone):
+            send_whatsapp(phone, message, restaurant_id=restaurant_id)
+        if order.get("sms_optin"):
+            send_sms(phone, message, restaurant_id=restaurant_id)
+
+    if order.get("customer_email"):
+        send_email(
+            order["customer_email"],
+            f"How was your order from {restaurant_name}?",
+            message,
+            restaurant_id=restaurant_id,
         )

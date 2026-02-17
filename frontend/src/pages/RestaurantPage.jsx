@@ -14,7 +14,7 @@ import CheckoutForm from "../components/order/CheckoutForm";
 export default function RestaurantPage() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { addItem } = useBasket();
+  const { addItem, totalItems, subtotal: basketTotal } = useBasket();
 
   const [restaurant, setRestaurant] = useState(null);
   const [menu, setMenu] = useState([]);
@@ -139,6 +139,7 @@ export default function RestaurantPage() {
   if (!restaurant) return <div className="error">Restaurant not found</div>;
 
   const handleAddItem = (item) => {
+    if (restaurant.accepting_orders === false) return;
     addItem(item, restaurant.id, restaurant.slug);
   };
 
@@ -226,6 +227,25 @@ export default function RestaurantPage() {
         </section>
       ) : null}
 
+      {restaurant.accepting_orders === false && (
+        <section className="section" style={{ padding: "0 6vw" }}>
+          <div className="container">
+            <div style={{
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 12,
+              padding: "1rem 1.5rem",
+              textAlign: "center",
+              color: "#991b1b",
+              fontWeight: 600,
+            }}>
+              <i className="fas fa-pause-circle" style={{ marginRight: 8 }} />
+              This restaurant is not currently accepting online orders.
+            </div>
+          </div>
+        </section>
+      )}
+
       <section id="menu" className="menu" style={{ padding: "72px 6vw" }}>
         <div className="container">
           <div className="restaurant-layout">
@@ -233,7 +253,7 @@ export default function RestaurantPage() {
               <div className="section-title" style={{ marginBottom: 32, textAlign: "left" }}>
                 <p className="eyebrow">Menu</p>
                 <h2 style={{ fontFamily: '"Fraunces", serif', margin: "12px 0 0" }}>
-                  Order ahead
+                  {restaurant.accepting_orders === false ? "Our Menu" : "Order ahead"}
                 </h2>
               </div>
               {menu.length === 0 ? (
@@ -304,6 +324,22 @@ export default function RestaurantPage() {
         </div>
       </section>
 
+      {/* Floating mobile basket bar */}
+      {totalItems > 0 && !checkout && (
+        <div
+          className="mobile-basket-bar"
+          onClick={() => {
+            setCheckout(true);
+            window.scrollTo(0, 0);
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span className="mobile-basket-bar__badge">{totalItems}</span>
+            <span style={{ fontWeight: 600 }}>View Basket</span>
+          </div>
+          <span style={{ fontWeight: 700 }}>&pound;{basketTotal.toFixed(2)}</span>
+        </div>
+      )}
     </div>
   );
 }

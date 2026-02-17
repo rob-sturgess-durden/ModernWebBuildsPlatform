@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Body, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from ..database import get_db
-from ..models import OrderCreate, OrderResponse
+from ..models import OrderCreate, OrderResponse, ReviewCreate, ReviewResponse
 from ..services.order_service import create_order, advance_order_status
 from .. import config
 from ..services.notification import (
@@ -138,7 +138,7 @@ def place_order(order: OrderCreate, background_tasks: BackgroundTasks):
         ).fetchone()
     if restaurant:
         background_tasks.add_task(notify_new_order, result, dict(restaurant))
-        background_tasks.add_task(notify_customer_received, result, dict(restaurant).get("name", ""))
+        background_tasks.add_task(notify_customer_received, result, dict(restaurant).get("name", ""), order.restaurant_id)
 
     # Opt-in request (business-initiated template). If user is already opted-in, do nothing.
     if not is_whatsapp_opted_in(result["customer_phone"]):
@@ -243,3 +243,75 @@ def owner_action(
         "<p>Customer notification has been sent.</p>",
         status_code=200,
     )
+
+
+@router.post("/{order_number}/collect")
+def customer_collect(order_number: str):
+    """Customer confirms they have collected their order."""
+    with get_db() as db:
+        order = db.execute(
+            "SELECT id, restaurant_id, status FROM orders WHERE order_number = ?",
+            (order_number,),
+        ).fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if order["status"] == "collected":
+            return {"ok": True, "status": "collected"}
+        if order["status"] != "ready":
+            raise HTTPException(status_code=400, detail="Order is not ready for collection")
+
+    try:
+        updated = advance_order_status(order["id"], "collected", order["restaurant_id"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "status": updated["status"]}
+
+
+@router.post("/{order_number}/review")
+def submit_review(order_number: str, body: ReviewCreate):
+    """Submit a review for a collected order."""
+    if body.rating < 1 or body.rating > 5:
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+
+    with get_db() as db:
+        order = db.execute(
+            "SELECT id, restaurant_id, customer_name FROM orders WHERE order_number = ?",
+            (order_number,),
+        ).fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        existing = db.execute("SELECT id FROM reviews WHERE order_id = ?", (order["id"],)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Review already submitted for this order")
+
+        db.execute(
+            "INSERT INTO reviews (order_id, restaurant_id, customer_name, rating, comment) VALUES (?, ?, ?, ?, ?)",
+            (order["id"], order["restaurant_id"], order["customer_name"], body.rating, body.comment),
+        )
+    return {"ok": True}
+
+
+@router.get("/{order_number}/review")
+def get_review(order_number: str):
+    """Get the review for an order, if one exists."""
+    with get_db() as db:
+        order = db.execute(
+            "SELECT id FROM orders WHERE order_number = ?", (order_number,)
+        ).fetchone()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        review = db.execute(
+            "SELECT id, rating, comment, created_at FROM reviews WHERE order_id = ?",
+            (order["id"],),
+        ).fetchone()
+
+    if not review:
+        return {"review": None}
+    return {"review": ReviewResponse(
+        id=review["id"],
+        rating=review["rating"],
+        comment=review["comment"] or "",
+        created_at=review["created_at"] or "",
+    )}

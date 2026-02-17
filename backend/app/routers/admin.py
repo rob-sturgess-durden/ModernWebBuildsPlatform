@@ -1,8 +1,11 @@
+import io
 import json
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Header, BackgroundTasks, Body
+from fastapi.responses import StreamingResponse
 from ..database import get_db
 from .. import config
 from ..models import (
@@ -11,7 +14,10 @@ from ..models import (
     RestaurantUpdate, CustomerSummary,
 )
 from ..services.order_service import advance_order_status
-from ..services.notification import notify_customer_status, send_email
+from ..services.notification import (
+    notify_customer_status, send_email, send_sms, send_whatsapp,
+    is_whatsapp_opted_in,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -152,6 +158,9 @@ def get_admin_stats(authorization: str = Header(...)):
     week_revenue = week["revenue"]
     commission_rate = 0.10
 
+    # Credit balance
+    credits = restaurant.get("credits", 10.0) or 10.0
+
     return {
         "total_orders": totals["total_orders"],
         "total_revenue": round(total_revenue, 2),
@@ -163,6 +172,7 @@ def get_admin_stats(authorization: str = Header(...)):
         "today_revenue": round(today["revenue"], 2),
         "pending_orders": pending,
         "customer_count": customer_count,
+        "credits": round(float(credits), 2),
     }
 
 
@@ -313,15 +323,53 @@ def list_orders(status: str | None = None, authorization: str = Header(...)):
 @router.get("/customers", response_model=list[CustomerSummary])
 def list_customers(authorization: str = Header(...)):
     restaurant = _get_restaurant_from_token(authorization)
+    rid = restaurant["id"]
     with get_db() as db:
         rows = db.execute(
-            "SELECT customer_name, customer_email, COUNT(*) as order_count, MAX(created_at) as last_order_at "
-            "FROM orders WHERE restaurant_id = ? "
-            "GROUP BY LOWER(TRIM(customer_name)), LOWER(TRIM(customer_email)) "
-            "ORDER BY last_order_at DESC",
-            (restaurant["id"],),
+            """SELECT customer_name, customer_email, customer_phone,
+                      COUNT(*) as order_count, MAX(created_at) as last_order_at,
+                      MAX(sms_optin) as sms_optin
+               FROM orders WHERE restaurant_id = ?
+               GROUP BY LOWER(TRIM(customer_name)), LOWER(TRIM(customer_email))
+               ORDER BY last_order_at DESC""",
+            (rid,),
         ).fetchall()
-    return [dict(r) for r in rows]
+
+        # Build lookup sets for marketing opt-in and WhatsApp opt-in
+        marketing_emails = set()
+        marketing_phones = set()
+        mkt_rows = db.execute(
+            "SELECT email, phone FROM marketing_signups WHERE restaurant_id = ?", (rid,)
+        ).fetchall()
+        for mr in mkt_rows:
+            if mr["email"]:
+                marketing_emails.add(mr["email"].strip().lower())
+            if mr["phone"]:
+                marketing_phones.add(mr["phone"].strip())
+
+        wa_phones = set()
+        wa_rows = db.execute("SELECT phone FROM whatsapp_optins WHERE opted_in = 1").fetchall()
+        for wr in wa_rows:
+            if wr["phone"]:
+                wa_phones.add(wr["phone"].strip())
+
+    results = []
+    for r in rows:
+        email = (r["customer_email"] or "").strip().lower()
+        phone = (r["customer_phone"] or "").strip()
+        mkt = email in marketing_emails or phone in marketing_phones
+        wa = phone in wa_phones
+        results.append({
+            "customer_name": r["customer_name"],
+            "customer_email": r["customer_email"],
+            "customer_phone": r["customer_phone"],
+            "order_count": r["order_count"],
+            "last_order_at": r["last_order_at"],
+            "marketing_optin": mkt,
+            "whatsapp_optin": wa,
+            "sms_optin": bool(r["sms_optin"]),
+        })
+    return results
 
 
 @router.patch("/orders/{order_id}/status", response_model=OrderResponse)
@@ -337,7 +385,7 @@ def update_order_status(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    background_tasks.add_task(notify_customer_status, result, restaurant["name"])
+    background_tasks.add_task(notify_customer_status, result, restaurant["name"], restaurant["id"])
     return result
 
 
@@ -632,3 +680,264 @@ def delete_gallery_image(image_id: int, authorization: str = Header(...)):
         ).rowcount
     if not deleted:
         raise HTTPException(status_code=404, detail="Gallery image not found")
+
+
+@router.post("/customers/send-message")
+def send_customer_message(
+    body: dict = Body(...),
+    background_tasks: BackgroundTasks = None,
+    authorization: str = Header(...),
+):
+    """Send a message to selected customers via their preferred channels."""
+    restaurant = _get_restaurant_from_token(authorization)
+    rid = restaurant["id"]
+    message = (body.get("message") or "").strip()
+    recipients = body.get("recipients") or []  # list of {phone, email, channels: []}
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+    if not recipients:
+        raise HTTPException(status_code=400, detail="No recipients selected")
+
+    from ..services.credits import has_credits
+    if not has_credits(rid):
+        raise HTTPException(status_code=402, detail="Insufficient credits to send messages")
+
+    sent_count = 0
+    for r in recipients:
+        channels = r.get("channels") or []
+        phone = (r.get("phone") or "").strip()
+        email = (r.get("email") or "").strip()
+
+        if "whatsapp" in channels and phone:
+            if is_whatsapp_opted_in(phone):
+                send_whatsapp(phone, message, restaurant_id=rid)
+                sent_count += 1
+        if "sms" in channels and phone:
+            send_sms(phone, message, restaurant_id=rid)
+            sent_count += 1
+        if "email" in channels and email:
+            send_email(email, f"Message from {restaurant['name']}", message, restaurant_id=rid)
+            sent_count += 1
+
+    return {"ok": True, "sent": sent_count}
+
+
+@router.post("/topup")
+def create_topup_session(authorization: str = Header(...)):
+    """Create a Stripe Checkout session for topping up 10 credits."""
+    if not config.STRIPE_SECRET_KEY or not config.STRIPE_PRICE_ID:
+        raise HTTPException(status_code=501, detail="Stripe is not configured")
+
+    restaurant = _get_restaurant_from_token(authorization)
+    import stripe
+    stripe.api_key = config.STRIPE_SECRET_KEY
+
+    session = stripe.checkout.Session.create(
+        mode="payment",
+        line_items=[{"price": config.STRIPE_PRICE_ID, "quantity": 1}],
+        metadata={"restaurant_id": str(restaurant["id"])},
+        success_url=f"{config.PUBLIC_BASE_URL}/admin/dashboard?topup=success",
+        cancel_url=f"{config.PUBLIC_BASE_URL}/admin/dashboard?topup=cancel",
+    )
+    return {"url": session.url}
+
+
+@router.get("/flyer")
+def generate_flyer(authorization: str = Header(...)):
+    """Generate an A5 promotional flyer PNG for the restaurant."""
+    from PIL import Image, ImageDraw, ImageFont
+    import qrcode
+    import requests as http_requests
+
+    restaurant = _get_restaurant_from_token(authorization)
+    slug = restaurant["slug"]
+    name = restaurant["name"]
+    cuisine = (restaurant.get("cuisine_type") or "").split("(")[0].strip()
+    url = f"{config.PUBLIC_BASE_URL}/{slug}"
+
+    # A5 at 150 DPI: 874 x 1240 px
+    W, H = 874, 1240
+    ACCENT = (232, 93, 42)  # ForkItt orange #E85D2A
+    WHITE = (255, 255, 255)
+    DARK = (30, 30, 30)
+    LIGHT_TEXT = (100, 100, 100)
+
+    img = Image.new("RGB", (W, H), WHITE)
+    draw = ImageDraw.Draw(img)
+
+    # Fonts — use system fonts, fallback gracefully
+    def load_font(size, bold=False):
+        paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]
+        for p in paths:
+            try:
+                return ImageFont.truetype(p, size)
+            except (OSError, IOError):
+                continue
+        return ImageFont.load_default()
+
+    font_name = load_font(52, bold=True)
+    font_cuisine = load_font(28)
+    font_tagline = load_font(22, bold=True)
+    font_url = load_font(20)
+    font_powered = load_font(18)
+    font_cta = load_font(26, bold=True)
+
+    y = 60
+
+    # --- Top accent bar ---
+    draw.rectangle([0, 0, W, 8], fill=ACCENT)
+
+    # --- Restaurant logo ---
+    logo_url = restaurant.get("logo_url")
+    logo_size = 120
+    if logo_url:
+        try:
+            resp = http_requests.get(logo_url, timeout=10)
+            if resp.status_code == 200:
+                logo_img = Image.open(io.BytesIO(resp.content)).convert("RGBA")
+                logo_img = logo_img.resize((logo_size, logo_size), Image.LANCZOS)
+                # Centre logo
+                lx = (W - logo_size) // 2
+                # Paste with alpha
+                bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+                bg.paste(img.convert("RGBA"))
+                bg.paste(logo_img, (lx, y), logo_img)
+                img = bg.convert("RGB")
+                draw = ImageDraw.Draw(img)
+                y += logo_size + 20
+        except Exception:
+            y += 20
+    else:
+        y += 20
+
+    # --- Restaurant name ---
+    bbox = draw.textbbox((0, 0), name, font=font_name)
+    tw = bbox[2] - bbox[0]
+    draw.text(((W - tw) // 2, y), name, fill=DARK, font=font_name)
+    y += (bbox[3] - bbox[1]) + 12
+
+    # --- Cuisine type ---
+    if cuisine:
+        bbox = draw.textbbox((0, 0), cuisine, font=font_cuisine)
+        tw = bbox[2] - bbox[0]
+        draw.text(((W - tw) // 2, y), cuisine, fill=LIGHT_TEXT, font=font_cuisine)
+        y += (bbox[3] - bbox[1]) + 16
+
+    # --- Divider ---
+    y += 10
+    draw.line([(W // 4, y), (3 * W // 4, y)], fill=(220, 220, 220), width=2)
+    y += 30
+
+    # --- CTA text ---
+    cta = "Order online for Click & Collect"
+    bbox = draw.textbbox((0, 0), cta, font=font_cta)
+    tw = bbox[2] - bbox[0]
+    draw.text(((W - tw) // 2, y), cta, fill=ACCENT, font=font_cta)
+    y += (bbox[3] - bbox[1]) + 10
+
+    cta2 = "Scan the QR code below"
+    bbox = draw.textbbox((0, 0), cta2, font=font_cuisine)
+    tw = bbox[2] - bbox[0]
+    draw.text(((W - tw) // 2, y), cta2, fill=LIGHT_TEXT, font=font_cuisine)
+    y += (bbox[3] - bbox[1]) + 30
+
+    # --- QR code ---
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=10, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color=DARK, back_color=WHITE).convert("RGB")
+
+    qr_size = 320
+    qr_img = qr_img.resize((qr_size, qr_size), Image.LANCZOS)
+
+    # Add orange border around QR
+    bordered_size = qr_size + 16
+    qr_bordered = Image.new("RGB", (bordered_size, bordered_size), ACCENT)
+    qr_bordered.paste(qr_img, (8, 8))
+
+    qx = (W - bordered_size) // 2
+    img.paste(qr_bordered, (qx, y))
+    y += bordered_size + 20
+
+    # --- URL text ---
+    display_url = url.replace("https://", "").replace("http://", "")
+    bbox = draw.textbbox((0, 0), display_url, font=font_url)
+    tw = bbox[2] - bbox[0]
+    draw.text(((W - tw) // 2, y), display_url, fill=ACCENT, font=font_url)
+    y += (bbox[3] - bbox[1]) + 40
+
+    # --- Benefits ---
+    benefits = [
+        "No app needed — order from your phone",
+        "Skip the queue with Click & Collect",
+        "Lower fees — more goes to your local restaurant",
+    ]
+    for b in benefits:
+        line = f"\u2713  {b}"
+        bbox = draw.textbbox((0, 0), line, font=font_cuisine)
+        tw = bbox[2] - bbox[0]
+        draw.text(((W - tw) // 2, y), line, fill=DARK, font=font_cuisine)
+        y += (bbox[3] - bbox[1]) + 14
+
+    # --- Bottom section: Powered by ForkItt ---
+    # Orange footer bar
+    footer_h = 120
+    footer_y = H - footer_h
+    draw.rectangle([0, footer_y, W, H], fill=ACCENT)
+
+    # ForkItt logo in footer
+    forkit_logo_path = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "public" / "forkit-logo.png"
+    if not forkit_logo_path.exists():
+        forkit_logo_path = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "public" / "forkit-logo.svg"
+
+    forkitt_logo_size = 40
+    logo_loaded = False
+    if forkit_logo_path.exists() and forkit_logo_path.suffix == ".png":
+        try:
+            fi = Image.open(forkit_logo_path).convert("RGBA").resize((forkitt_logo_size, forkitt_logo_size), Image.LANCZOS)
+            logo_loaded = True
+        except Exception:
+            pass
+
+    line1 = "Local Restaurants \u2022 Click & Collect"
+    line2 = "Powered by ForkItt"
+
+    bbox1 = draw.textbbox((0, 0), line1, font=font_tagline)
+    tw1 = bbox1[2] - bbox1[0]
+    bbox2 = draw.textbbox((0, 0), line2, font=font_powered)
+    tw2 = bbox2[2] - bbox2[0]
+
+    if logo_loaded:
+        # Logo + "Powered by ForkItt" on one line
+        combo_w = forkitt_logo_size + 8 + tw2
+        lx = (W - combo_w) // 2
+        ly = footer_y + (footer_h - forkitt_logo_size) // 2 + 12
+
+        # Line 1 centered above
+        draw.text(((W - tw1) // 2, footer_y + 14), line1, fill=WHITE, font=font_tagline)
+
+        # Logo + line2
+        bg = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        bg.paste(img.convert("RGBA"))
+        bg.paste(fi, (lx, ly), fi)
+        img = bg.convert("RGB")
+        draw = ImageDraw.Draw(img)
+        draw.text((lx + forkitt_logo_size + 8, ly + (forkitt_logo_size - (bbox2[3] - bbox2[1])) // 2), line2, fill=WHITE, font=font_powered)
+    else:
+        draw.text(((W - tw1) // 2, footer_y + 20), line1, fill=WHITE, font=font_tagline)
+        draw.text(((W - tw2) // 2, footer_y + 60), line2, fill=WHITE, font=font_powered)
+
+    # Return as PNG
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", dpi=(150, 150))
+    buf.seek(0)
+    filename = f"ForkItt-Flyer-{slug}.png"
+    return StreamingResponse(
+        buf,
+        media_type="image/png",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

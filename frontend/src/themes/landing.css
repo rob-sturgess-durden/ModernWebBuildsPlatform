@@ -292,6 +292,7 @@
 }
 
 .landing-page .forkit-restaurant-image {
+  position: relative;
   height: 180px;
   display: flex;
   align-items: center;

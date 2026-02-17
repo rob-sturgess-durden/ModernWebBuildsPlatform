@@ -93,3 +93,41 @@ async def twilio_whatsapp_webhook(request: Request):
 
     # Empty TwiML response: acknowledge receipt and do not auto-reply.
     return Response(content="<?xml version='1.0' encoding='UTF-8'?><Response></Response>", media_type="application/xml")
+
+
+@router.post("/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events (checkout.session.completed)."""
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    if not config.STRIPE_WEBHOOK_SECRET:
+        logger.warning("STRIPE_WEBHOOK_SECRET not configured, rejecting webhook")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+    import stripe
+    stripe.api_key = config.STRIPE_SECRET_KEY
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, config.STRIPE_WEBHOOK_SECRET)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        metadata = session.get("metadata") or {}
+        restaurant_id = metadata.get("restaurant_id")
+
+        if restaurant_id:
+            from ..services.credits import add_credits
+            new_balance = add_credits(int(restaurant_id), 10.0, "stripe_topup")
+            logger.info(
+                "Stripe topup: restaurant=%s session=%s new_balance=%.2f",
+                restaurant_id, session.get("id"), new_balance,
+            )
+        else:
+            logger.warning("Stripe checkout.session.completed without restaurant_id metadata: %s", session.get("id"))
+
+    return Response(status_code=200)

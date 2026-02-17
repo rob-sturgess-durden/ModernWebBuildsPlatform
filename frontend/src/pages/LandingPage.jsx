@@ -21,12 +21,12 @@ export default function LandingPage() {
       <nav className="forkit-navbar">
         <div className="forkit-nav-container">
           <div className="forkit-nav-logo">
-            <span className="forkit-logo-icon">🍴</span>
-            <h2>Forkit</h2>
+            <img src="/forkit-logo.svg" alt="ForkItt" style={{ width: 32, height: 32 }} />
+            <h2>ForkItt</h2>
           </div>
           <ul className="forkit-nav-menu">
             <li><a href="#home" onClick={(e) => { e.preventDefault(); scrollTo("home"); }}>Home</a></li>
-            <li><a href="#benefits" onClick={(e) => { e.preventDefault(); scrollTo("benefits"); }}>Why Forkit</a></li>
+            <li><a href="#benefits" onClick={(e) => { e.preventDefault(); scrollTo("benefits"); }}>Why ForkItt</a></li>
             <li><a href="#restaurants" onClick={(e) => { e.preventDefault(); scrollTo("restaurants"); }}>Restaurants</a></li>
             <li><a href="#contact" onClick={(e) => { e.preventDefault(); scrollTo("contact"); }}>Get Started</a></li>
           </ul>
@@ -40,7 +40,7 @@ export default function LandingPage() {
             <span className="forkit-hero-badge">Your restaurant, your rules</span>
             <h1>Break free from Deliveroo & Just Eat</h1>
             <p className="forkit-hero-lead">
-              Forkit gives restaurants the freedom they deserve. Lower fees, no upfront costs, and full control over your customers. Easy, convenient, and built for you.
+              ForkItt gives restaurants the freedom they deserve. Lower fees, no upfront costs, and full control over your customers. Easy, convenient, and built for you.
             </p>
             <div className="forkit-hero-buttons">
               <a href="#contact" className="forkit-btn forkit-btn-primary" onClick={(e) => { e.preventDefault(); scrollTo("contact"); }}>Get Started Free</a>
@@ -51,19 +51,19 @@ export default function LandingPage() {
             <div className="forkit-hero-card">
               <div className="forkit-hero-card-row">
                 <span className="forkit-hero-stat">Lower fees</span>
-                <span className="forkit-hero-check">✓</span>
+                <span className="forkit-hero-check">{"\u2713"}</span>
               </div>
               <div className="forkit-hero-card-row">
                 <span className="forkit-hero-stat">No upfront costs</span>
-                <span className="forkit-hero-check">✓</span>
+                <span className="forkit-hero-check">{"\u2713"}</span>
               </div>
               <div className="forkit-hero-card-row">
                 <span className="forkit-hero-stat">Own your customer data</span>
-                <span className="forkit-hero-check">✓</span>
+                <span className="forkit-hero-check">{"\u2713"}</span>
               </div>
               <div className="forkit-hero-card-row">
                 <span className="forkit-hero-stat">Run promotions direct</span>
-                <span className="forkit-hero-check">✓</span>
+                <span className="forkit-hero-check">{"\u2713"}</span>
               </div>
             </div>
           </div>
@@ -73,7 +73,7 @@ export default function LandingPage() {
       {/* Benefits */}
       <section id="benefits" className="forkit-section forkit-section-dark">
         <div className="forkit-container">
-          <h2>Why restaurants choose Forkit</h2>
+          <h2>Why restaurants choose ForkItt</h2>
           <div className="forkit-benefits-grid">
             {BENEFITS.map((b, i) => (
               <div key={i} className="forkit-benefit-card">
@@ -86,16 +86,44 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Restaurants using Forkit */}
+      {/* Restaurants using ForkItt */}
       <section id="restaurants" className="forkit-section forkit-section-darker">
         <div className="forkit-container">
-          <h2>Restaurants on Forkit</h2>
+          <h2>Restaurants on ForkItt</h2>
           <p className="forkit-section-sub">See how easy it is to take orders and keep more of what you earn.</p>
           <div className="forkit-restaurants-grid">
             {restaurants.slice(0, 6).map((r) => (
               <Link key={r.id} to={`/${r.slug}`} className="forkit-restaurant-item">
-                <div className="forkit-restaurant-image" style={{ background: getGradient(r.cuisine_type) }}>
-                  {getCuisineEmoji(r.cuisine_type)}
+                <div
+                  className="forkit-restaurant-image"
+                  style={{
+                    background: r.banner_url
+                      ? `linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.5)), url(${r.banner_url}) center/cover no-repeat`
+                      : getGradient(r.cuisine_type),
+                  }}
+                >
+                  {r.logo_url ? (
+                    <img
+                      src={r.logo_url}
+                      alt={`${r.name} logo`}
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      style={{
+                        width: 48,
+                        height: 48,
+                        objectFit: "contain",
+                        borderRadius: 10,
+                        background: "white",
+                        padding: 3,
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                        position: "absolute",
+                        bottom: 12,
+                        left: 12,
+                      }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: "2rem" }}>{getCuisineEmoji(r.cuisine_type)}</span>
+                  )}
                 </div>
                 <div className="forkit-restaurant-content">
                   <h3>{r.name}</h3>
@@ -115,11 +143,11 @@ export default function LandingPage() {
       {/* Contact / Get Started */}
       <section id="contact" className="forkit-section forkit-section-dark">
         <div className="forkit-container">
-          <h2>Get started with Forkit</h2>
+          <h2>Get started with ForkItt</h2>
           <div className="forkit-contact-content">
             <div className="forkit-contact-info">
               <h3>Ready to take back control?</h3>
-              <p>No upfront fees. No long-term contracts. Just lower fees and the freedom to run your restaurant your way. Join the restaurants already using Forkit.</p>
+              <p>No upfront fees. No long-term contracts. Just lower fees and the freedom to run your restaurant your way. Join the restaurants already using ForkItt.</p>
               <div className="forkit-contact-details">
                 <div className="forkit-contact-item">
                   <i className="fas fa-phone"></i>
@@ -156,7 +184,7 @@ export default function LandingPage() {
         <div className="forkit-container">
           <div className="forkit-footer-content">
             <div className="forkit-footer-section">
-              <h3><span className="forkit-logo-icon">🍴</span> Forkit</h3>
+              <h3><img src="/forkit-logo.svg" alt="" style={{ width: 24, height: 24, verticalAlign: "middle", marginRight: 8 }} />ForkItt</h3>
               <p>Online ordering for restaurants. Lower fees. Full control. No upfront costs.</p>
             </div>
             <div className="forkit-footer-section">
@@ -178,7 +206,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="forkit-footer-bottom">
-            <p>&copy; {new Date().getFullYear()} Forkit. All rights reserved.</p>
+            <p>&copy; {new Date().getFullYear()} ForkItt. All rights reserved.</p>
           </div>
         </div>
       </footer>
@@ -195,7 +223,7 @@ function ContactForm() {
     btn.textContent = "Sending...";
     btn.disabled = true;
     setTimeout(() => {
-      setStatus("Thanks! We'll be in touch soon to help you get started with Forkit.");
+      setStatus("Thanks! We'll be in touch soon to help you get started with ForkItt.");
       e.target.reset();
       btn.textContent = "Get in Touch";
       btn.disabled = false;
@@ -216,12 +244,12 @@ function ContactForm() {
 }
 
 const BENEFITS = [
-  { icon: "💰", title: "Lower service fees", desc: "Keep more of what you earn. Forkit charges a fraction of what the big platforms take, so your margins stay healthy." },
-  { icon: "🚀", title: "No upfront fees", desc: "Get started with zero upfront cost. No setup fees, no monthly minimums. You only pay when you earn." },
-  { icon: "👥", title: "Own your customers", desc: "Build your own customer base. Full control over contact details, order history, and the relationship you have with diners." },
-  { icon: "📢", title: "Run promotions direct", desc: "Send offers and updates straight to your customers. No algorithm deciding who sees your deals—you're in control." },
-  { icon: "⚡", title: "Easy & convenient", desc: "Simple setup, intuitive admin, and orders that flow straight to you. Click & collect made straightforward." },
-  { icon: "🔓", title: "Freedom from big platforms", desc: "Break away from Deliveroo and Just Eat. No more competing with their own brands or bending to their terms." },
+  { icon: "\uD83D\uDCB0", title: "Lower service fees", desc: "Keep more of what you earn. ForkItt charges a fraction of what the big platforms take, so your margins stay healthy." },
+  { icon: "\uD83D\uDE80", title: "No upfront fees", desc: "Get started with zero upfront cost. No setup fees, no monthly minimums. You only pay when you earn." },
+  { icon: "\uD83D\uDC65", title: "Own your customers", desc: "Build your own customer base. Full control over contact details, order history, and the relationship you have with diners." },
+  { icon: "\uD83D\uDCE2", title: "Run promotions direct", desc: "Send offers and updates straight to your customers. No algorithm deciding who sees your deals\u2014you're in control." },
+  { icon: "\u26A1", title: "Easy & convenient", desc: "Simple setup, intuitive admin, and orders that flow straight to you. Click & collect made straightforward." },
+  { icon: "\uD83D\uDD13", title: "Freedom from big platforms", desc: "Break away from Deliveroo and Just Eat. No more competing with their own brands or bending to their terms." },
 ];
 
 function getCuisineEmoji(cuisine) {

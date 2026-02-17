@@ -60,12 +60,12 @@ export default function InstallPrompt() {
   };
 
   return (
-    <div className="install-banner" role="dialog" aria-label="Install ForkIt">
+    <div className="install-banner" role="dialog" aria-label="Install ForkItt">
       <div className="install-banner__inner">
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <img src="/forkit-logo.svg" alt="" style={{ width: 22, height: 22 }} />
           <div>
-            <div style={{ fontWeight: 800, lineHeight: 1.1 }}>Save ForkIt</div>
+            <div style={{ fontWeight: 800, lineHeight: 1.1 }}>Save ForkItt</div>
             <div style={{ fontSize: 12, color: "var(--text-light)", lineHeight: 1.2 }}>
               Add to your home screen for a faster checkout.
             </div>

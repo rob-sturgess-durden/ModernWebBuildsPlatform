@@ -1,13 +1,16 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from apscheduler.schedulers.background import BackgroundScheduler
 from .database import init_db
 from . import config
 from .routers import restaurants, menu, orders, admin, superadmin, webhooks, sendgrid_inbound, uploads, marketing, owner_portal
+from .services.followup import check_followup_orders
 
 # Ensure upload directory exists before StaticFiles mounts (Starlette checks at import-time).
 try:
@@ -16,10 +19,17 @@ except Exception:
     pass
 
 
+_scheduler = BackgroundScheduler()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _scheduler.add_job(check_followup_orders, "interval", seconds=60, id="followup")
+    _scheduler.start()
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)
     yield
+    _scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="Hackney Eats", version="1.0.0", lifespan=lifespan)
