@@ -48,7 +48,25 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="forkit-hero-visual">
-            <div className="forkit-hero-card">
+            <div className="forkit-hero-card" style={{ position: "relative" }}>
+              <div
+                style={{
+                  position: "absolute",
+                  top: "12px",
+                  right: "12px",
+                  background: "rgba(255, 255, 255, 0.95)",
+                  color: "var(--accent, #c4501a)",
+                  padding: "4px 10px",
+                  borderRadius: "12px",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                Coming Soon
+              </div>
               <div className="forkit-hero-card-row">
                 <span className="forkit-hero-stat">Lower fees</span>
                 <span className="forkit-hero-check">{"\u2713"}</span>
@@ -76,7 +94,25 @@ export default function LandingPage() {
           <h2>Why restaurants choose ForkItt</h2>
           <div className="forkit-benefits-grid">
             {BENEFITS.map((b, i) => (
-              <div key={i} className="forkit-benefit-card">
+              <div key={i} className="forkit-benefit-card" style={{ position: "relative" }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "12px",
+                    right: "12px",
+                    background: "rgba(255, 255, 255, 0.95)",
+                    color: "var(--accent, #c4501a)",
+                    padding: "4px 10px",
+                    borderRadius: "12px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  Coming Soon
+                </div>
                 <div className="forkit-benefit-icon">{b.icon}</div>
                 <h3>{b.title}</h3>
                 <p>{b.desc}</p>
@@ -97,11 +133,31 @@ export default function LandingPage() {
                 <div
                   className="forkit-restaurant-image"
                   style={{
+                    position: "relative",
                     background: r.banner_url
                       ? `linear-gradient(to bottom, rgba(0,0,0,0.05), rgba(0,0,0,0.5)), url(${r.banner_url}) center/cover no-repeat`
                       : getGradient(r.cuisine_type),
                   }}
                 >
+                  {/* Coming Soon label */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "12px",
+                      right: "12px",
+                      background: "rgba(255, 255, 255, 0.95)",
+                      color: "var(--accent, #c4501a)",
+                      padding: "4px 10px",
+                      borderRadius: "12px",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                      boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                    }}
+                  >
+                    Coming Soon
+                  </div>
                   {r.logo_url ? (
                     <img
                       src={r.logo_url}

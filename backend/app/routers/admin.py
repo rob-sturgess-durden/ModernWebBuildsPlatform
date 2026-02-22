@@ -10,7 +10,7 @@ from ..database import get_db
 from .. import config
 from ..models import (
     AdminLogin, OrderResponse, OrderStatusUpdate,
-    MenuItemCreate, MenuItemUpdate, MenuItem, CategoryCreate, ScrapeRequest,
+    MenuItemCreate, MenuItemUpdate, MenuItem, CategoryCreate,
     RestaurantUpdate, CustomerSummary,
 )
 from ..services.order_service import advance_order_status
@@ -186,7 +186,7 @@ def get_admin_restaurant(authorization: str = Header(...)):
         row = db.execute(
             "SELECT id, name, slug, address, cuisine_type, about_text, banner_text, latitude, longitude, "
             "logo_url, banner_url, instagram_handle, facebook_handle, phone, whatsapp_number, "
-            "mobile_number, notification_channel, owner_email, theme, deliveroo_url, justeat_url, is_active, opening_hours, "
+            "mobile_number, notification_channel, owner_email, theme, is_active, opening_hours, "
             "status, preview_password "
             "FROM restaurants WHERE id = ?",
             (restaurant["id"],),
@@ -250,10 +250,6 @@ def update_admin_restaurant(body: RestaurantUpdate, authorization: str = Header(
         updates["owner_email"] = body.owner_email
     if body.theme is not None:
         updates["theme"] = (body.theme or "").strip().lower() or "modern"
-    if body.deliveroo_url is not None:
-        updates["deliveroo_url"] = body.deliveroo_url
-    if body.justeat_url is not None:
-        updates["justeat_url"] = body.justeat_url
     if body.is_active is not None:
         updates["is_active"] = int(body.is_active)
     if body.opening_hours is not None:
@@ -487,154 +483,6 @@ def list_categories(authorization: str = Header(...)):
             (restaurant["id"],),
         ).fetchall()
     return [dict(r) for r in rows]
-
-
-# --- Scraper ---
-
-@router.post("/menu/scrape")
-def scrape_menu(
-    body: ScrapeRequest,
-    import_to_menu: bool = False,
-    images_only: bool = False,
-    authorization: str = Header(...),
-):
-    restaurant = _get_restaurant_from_token(authorization)
-
-    url = body.url
-    if not url:
-        if body.source == "deliveroo":
-            url = restaurant.get("deliveroo_url")
-        elif body.source == "justeat":
-            url = restaurant.get("justeat_url")
-
-    if not url:
-        raise HTTPException(status_code=400, detail=f"No {body.source} URL configured for this restaurant")
-
-    try:
-        if body.source == "deliveroo":
-            from ..services.scraper_deliveroo import DeliverooScraper
-            scraper = DeliverooScraper()
-        elif body.source == "justeat":
-            from ..services.scraper_justeat import JustEatScraper
-            scraper = JustEatScraper()
-        else:
-            raise HTTPException(status_code=400, detail="Source must be 'deliveroo' or 'justeat'")
-
-        items = scraper.scrape_menu(url)
-    except ImportError:
-        raise HTTPException(status_code=501, detail="Scraper not yet implemented")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
-
-    if not import_to_menu:
-        return {"items": items, "count": len(items), "source": body.source, "mode": "preview"}
-
-    imported = 0
-    updated = 0
-    skipped = 0
-
-    with get_db() as db:
-        # Build category cache and menu lookup once.
-        categories = db.execute(
-            "SELECT id, name FROM menu_categories WHERE restaurant_id = ?",
-            (restaurant["id"],),
-        ).fetchall()
-        category_map = {_norm_name(c["name"]): c["id"] for c in categories}
-        max_display = db.execute(
-            "SELECT COALESCE(MAX(display_order), -1) as m FROM menu_categories WHERE restaurant_id = ?",
-            (restaurant["id"],),
-        ).fetchone()["m"]
-
-        menu_rows = db.execute(
-            "SELECT id, name FROM menu_items WHERE restaurant_id = ?",
-            (restaurant["id"],),
-        ).fetchall()
-        menu_by_norm = {_norm_name(m["name"]): m["id"] for m in menu_rows}
-
-        def ensure_category_id(raw_name: str) -> int | None:
-            nonlocal max_display
-            if not raw_name:
-                return None
-            key = _norm_name(raw_name)
-            if not key:
-                return None
-            if key in category_map:
-                return category_map[key]
-            max_display += 1
-            cur = db.execute(
-                "INSERT INTO menu_categories (restaurant_id, name, display_order) VALUES (?, ?, ?)",
-                (restaurant["id"], raw_name.strip(), max_display),
-            )
-            category_map[key] = cur.lastrowid
-            return cur.lastrowid
-
-        for item in items:
-            name = (item.get("name") or "").strip()
-            if not name:
-                skipped += 1
-                continue
-            key = _norm_name(name)
-            if not key:
-                skipped += 1
-                continue
-            image_url = (item.get("image_url") or None)
-            category_id = ensure_category_id(item.get("category", "Other"))
-            existing_id = menu_by_norm.get(key)
-
-            if images_only:
-                if existing_id and image_url:
-                    db.execute(
-                        "UPDATE menu_items SET image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                        (image_url, existing_id),
-                    )
-                    updated += 1
-                else:
-                    skipped += 1
-                continue
-
-            if existing_id:
-                db.execute(
-                    """UPDATE menu_items
-                       SET description = ?, price = ?, category_id = ?, image_url = ?, source = ?, updated_at = CURRENT_TIMESTAMP
-                       WHERE id = ?""",
-                    (
-                        item.get("description") or None,
-                        float(item.get("price") or 0),
-                        category_id,
-                        image_url,
-                        body.source,
-                        existing_id,
-                    ),
-                )
-                updated += 1
-            else:
-                cur = db.execute(
-                    """INSERT INTO menu_items
-                       (restaurant_id, category_id, name, description, price, image_url, source)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        restaurant["id"],
-                        category_id,
-                        name,
-                        item.get("description") or None,
-                        float(item.get("price") or 0),
-                        image_url,
-                        body.source,
-                    ),
-                )
-                menu_by_norm[key] = cur.lastrowid
-                imported += 1
-
-    return {
-        "items": items,
-        "count": len(items),
-        "source": body.source,
-        "mode": "import",
-        "images_only": images_only,
-        "imported": imported,
-        "updated": updated,
-        "skipped": skipped,
-    }
 
 
 # --- Gallery ---

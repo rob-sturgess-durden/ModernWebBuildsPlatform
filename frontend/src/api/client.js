@@ -238,15 +238,6 @@ export function updateAdminRestaurant(token, data) {
   });
 }
 
-/** Scrape Deliveroo/Just Eat and optionally import items into menu. */
-export function scrapeMenuWithImport(token, source, url = null, importToMenu = false) {
-  const query = importToMenu ? "?import_to_menu=true" : "";
-  return request(`/admin/menu/scrape${query}`, {
-    method: "POST",
-    body: JSON.stringify({ source, url }),
-    headers: adminHeaders(token),
-  });
-}
 
 export function addCategory(token, category) {
   return request("/admin/categories", {
@@ -256,13 +247,6 @@ export function addCategory(token, category) {
   });
 }
 
-export function scrapeMenu(token, source, url = null) {
-  return request("/admin/menu/scrape", {
-    method: "POST",
-    body: JSON.stringify({ source, url }),
-    headers: adminHeaders(token),
-  });
-}
 
 export function getAdminGallery(token) {
   return request("/admin/gallery", { headers: adminHeaders(token) });
@@ -334,6 +318,16 @@ export function deleteRestaurant(token, id) {
 export function regenerateToken(token, id) {
   return request(`/superadmin/restaurants/${id}/regenerate-token`, {
     method: "POST",
+    headers: superHeaders(token),
+  });
+}
+
+/** Superadmin: scrape Deliveroo menu for a restaurant and optionally import. Optional url overrides restaurant's Deliveroo URL. */
+export function superadminScrapeDeliveroo(token, restaurantId, importToMenu = false, url = null) {
+  const query = importToMenu ? "?import_to_menu=true" : "";
+  return request(`/superadmin/restaurants/${restaurantId}/menu/scrape${query}`, {
+    method: "POST",
+    body: JSON.stringify(url != null && url.trim() ? { url: url.trim() } : {}),
     headers: superHeaders(token),
   });
 }

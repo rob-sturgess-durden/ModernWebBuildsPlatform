@@ -12,7 +12,6 @@ import {
   uploadImage,
   getAdminRestaurant,
   updateAdminRestaurant,
-  scrapeMenuWithImport,
   getAdminCustomers,
   sendCustomerMessage,
   getAdminStats,
@@ -166,8 +165,6 @@ export default function AdminDashboard() {
   // Settings tab
   const [settings, setSettings] = useState(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
-  const [copyFromDeliverooLoading, setCopyFromDeliverooLoading] = useState(false);
-  const [copyFromDeliverooMessage, setCopyFromDeliverooMessage] = useState(null);
   const [openingHoursAdvanced, setOpeningHoursAdvanced] = useState(false);
 
   // Gallery
@@ -448,8 +445,6 @@ export default function AdminDashboard() {
         phone: settings.phone || null,
         whatsapp_number: settings.whatsapp_number || null,
         owner_email: settings.owner_email || null,
-        deliveroo_url: settings.deliveroo_url || null,
-        justeat_url: settings.justeat_url || null,
         opening_hours: settings.opening_hours || null,
       });
       const updated = await getAdminRestaurant(token);
@@ -461,26 +456,6 @@ export default function AdminDashboard() {
       alert(e.message);
     } finally {
       setSettingsSaving(false);
-    }
-  };
-
-  const handleCopyFromDeliveroo = async () => {
-    if (!settings?.deliveroo_url?.trim()) {
-      alert("Please save a Deliveroo URL in Settings first.");
-      return;
-    }
-    setCopyFromDeliverooLoading(true);
-    setCopyFromDeliverooMessage(null);
-    try {
-      const result = await scrapeMenuWithImport(token, "deliveroo", null, true);
-      setCopyFromDeliverooMessage(
-        `Imported ${result.imported ?? 0} new items, updated ${result.updated ?? 0}. Check the Menu tab.`
-      );
-      if (tab === "menu") loadMenu();
-    } catch (e) {
-      setCopyFromDeliverooMessage(`Failed: ${e.message}`);
-    } finally {
-      setCopyFromDeliverooLoading(false);
     }
   };
 
@@ -830,41 +805,6 @@ export default function AdminDashboard() {
                   type="email"
                   value={settings.owner_email || ""}
                   onChange={(e) => setSettings((s) => ({ ...s, owner_email: e.target.value }))}
-                />
-              </div>
-              <div className="form-group">
-                <label>Deliveroo menu URL</label>
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                  <input
-                    type="url"
-                    value={settings.deliveroo_url || ""}
-                    onChange={(e) => setSettings((s) => ({ ...s, deliveroo_url: e.target.value }))}
-                    placeholder="https://deliveroo.co.uk/menu/..."
-                    style={{ flex: 1, minWidth: 200 }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    onClick={handleCopyFromDeliveroo}
-                    disabled={copyFromDeliverooLoading || !(settings.deliveroo_url || "").trim()}
-                    title="Scrape menu items from your Deliveroo page and add them here"
-                  >
-                    {copyFromDeliverooLoading ? "Copying…" : "Copy menu from Deliveroo"}
-                  </button>
-                </div>
-                {copyFromDeliverooMessage && (
-                  <p style={{ marginTop: 8, fontSize: "0.9rem", color: "var(--text-light)" }}>
-                    {copyFromDeliverooMessage}
-                  </p>
-                )}
-              </div>
-              <div className="form-group">
-                <label>Just Eat URL (optional)</label>
-                <input
-                  type="url"
-                  value={settings.justeat_url || ""}
-                  onChange={(e) => setSettings((s) => ({ ...s, justeat_url: e.target.value }))}
-                  placeholder="https://www.just-eat.co.uk/..."
                 />
               </div>
               <div className="form-group">

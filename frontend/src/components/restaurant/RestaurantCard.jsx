@@ -19,6 +19,25 @@ export default function RestaurantCard({ restaurant }) {
             padding: "16px",
           }}
         >
+          {/* Coming Soon label */}
+          <div
+            style={{
+              position: "absolute",
+              top: "12px",
+              right: "12px",
+              background: "rgba(255, 255, 255, 0.95)",
+              color: "var(--accent, #c4501a)",
+              padding: "4px 10px",
+              borderRadius: "12px",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+            }}
+          >
+            Coming Soon
+          </div>
           {/* Logo overlay */}
           {restaurant.logo_url ? (
             <img

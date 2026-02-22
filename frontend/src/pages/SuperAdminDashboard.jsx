@@ -11,6 +11,7 @@ import {
   updateRestaurant,
   deleteRestaurant,
   regenerateToken,
+  superadminScrapeDeliveroo,
   uploadImage,
 } from "../api/client";
 
@@ -42,6 +43,8 @@ export default function SuperAdminDashboard() {
   const [logoFile, setLogoFile] = useState(null);
   const [bannerFile, setBannerFile] = useState(null);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [deliverooScrapeLoading, setDeliverooScrapeLoading] = useState(false);
+  const [deliverooScrapeMessage, setDeliverooScrapeMessage] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -213,7 +216,6 @@ export default function SuperAdminDashboard() {
       owner_email: restaurant.owner_email || "",
       theme: restaurant.theme || "modern",
       deliveroo_url: restaurant.deliveroo_url || "",
-      justeat_url: restaurant.justeat_url || "",
       is_active: restaurant.is_active,
       status: restaurant.status || "live",
       preview_password: restaurant.preview_password || "",
@@ -223,6 +225,28 @@ export default function SuperAdminDashboard() {
   const handleLogout = () => {
     localStorage.removeItem("superadmin_token");
     navigate("/superadmin");
+  };
+
+  const handleCopyFromDeliveroo = async () => {
+    if (editing === "new" || !editing) return;
+    const url = (form.deliveroo_url || "").trim();
+    if (!url) {
+      alert("Enter a Deliveroo URL (you can save after copying the menu).");
+      return;
+    }
+    setDeliverooScrapeLoading(true);
+    setDeliverooScrapeMessage(null);
+    try {
+      const result = await superadminScrapeDeliveroo(token, editing, true, url);
+      setDeliverooScrapeMessage(
+        `Imported ${result.imported ?? 0} new, updated ${result.updated ?? 0}. Refresh the list to see menu counts.`
+      );
+      loadData();
+    } catch (e) {
+      setDeliverooScrapeMessage(`Failed: ${e.message}`);
+    } finally {
+      setDeliverooScrapeLoading(false);
+    }
   };
 
   const handleUploadRestaurantMedia = async (kind) => {
@@ -531,11 +555,26 @@ export default function SuperAdminDashboard() {
               </div>
               <div className="form-group">
                 <label>Deliveroo URL</label>
-                <input value={form.deliveroo_url} onChange={(e) => setForm({ ...form, deliveroo_url: e.target.value })} placeholder="https://deliveroo.co.uk/menu/..." />
-              </div>
-              <div className="form-group">
-                <label>Just Eat URL</label>
-                <input value={form.justeat_url} onChange={(e) => setForm({ ...form, justeat_url: e.target.value })} placeholder="https://just-eat.co.uk/restaurants-..." />
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                  <input
+                    value={form.deliveroo_url}
+                    onChange={(e) => setForm({ ...form, deliveroo_url: e.target.value })}
+                    placeholder="https://deliveroo.co.uk/menu/..."
+                    style={{ flex: 1, minWidth: 200 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleCopyFromDeliveroo}
+                    disabled={deliverooScrapeLoading || editing === "new" || !(form.deliveroo_url || "").trim()}
+                    title="Scrape menu from Deliveroo and import into this restaurant"
+                  >
+                    {deliverooScrapeLoading ? "Copying…" : "Copy menu from Deliveroo"}
+                  </button>
+                </div>
+                {deliverooScrapeMessage && (
+                  <p style={{ marginTop: 8, fontSize: "0.9rem", color: "var(--text-light)" }}>{deliverooScrapeMessage}</p>
+                )}
               </div>
               <div className="form-group">
                 <label>Logo URL</label>
@@ -718,7 +757,6 @@ function emptyForm() {
     owner_email: "",
     theme: "modern",
     deliveroo_url: "",
-    justeat_url: "",
     is_active: true,
     status: "pending",
     preview_password: "",

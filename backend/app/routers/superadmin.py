@@ -68,6 +68,10 @@ def _make_slug(name: str) -> str:
     return re.sub(r"-+", "-", slug)
 
 
+def _norm_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (name or "").lower())
+
+
 def _row_to_admin(row, db) -> dict:
     hours = None
     if row["opening_hours"]:
@@ -112,7 +116,7 @@ def _row_to_admin(row, db) -> dict:
         admin_token=row["admin_token"],
         theme=row["theme"],
         deliveroo_url=row["deliveroo_url"],
-        justeat_url=row["justeat_url"],
+        justeat_url=row.get("justeat_url"),
         is_active=bool(row["is_active"]),
         status=row["status"] if "status" in row.keys() and row["status"] else "live",
         preview_password=row["preview_password"] if "preview_password" in row.keys() else None,
@@ -319,6 +323,122 @@ def regenerate_admin_token(restaurant_id: int, authorization: str = Header(...))
     if not updated:
         raise HTTPException(status_code=404, detail="Restaurant not found")
     return {"admin_token": new_token}
+
+
+@router.post("/restaurants/{restaurant_id}/menu/scrape")
+def superadmin_scrape_deliveroo(
+    restaurant_id: int,
+    import_to_menu: bool = False,
+    body: dict | None = Body(default=None),
+    authorization: str = Header(...),
+):
+    """Scrape Deliveroo menu for a restaurant and optionally import items. Superadmin only."""
+    _require_superadmin(authorization)
+    url_override = (body or {}).get("url") if isinstance(body, dict) else None
+    with get_db() as db:
+        row = db.execute("SELECT id, deliveroo_url FROM restaurants WHERE id = ?", (restaurant_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Restaurant not found")
+        scrape_url = url_override or row["deliveroo_url"]
+    if not scrape_url:
+        raise HTTPException(status_code=400, detail="No Deliveroo URL configured for this restaurant")
+    try:
+        from ..services.scraper_deliveroo import DeliverooScraper
+        scraper = DeliverooScraper()
+        items = scraper.scrape_menu(scrape_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+    if not import_to_menu:
+        return {"items": items, "count": len(items), "source": "deliveroo", "mode": "preview"}
+    imported = 0
+    updated = 0
+    skipped = 0
+    with get_db() as db:
+        categories = db.execute(
+            "SELECT id, name FROM menu_categories WHERE restaurant_id = ?",
+            (restaurant_id,),
+        ).fetchall()
+        category_map = {_norm_name(c["name"]): c["id"] for c in categories}
+        max_display = db.execute(
+            "SELECT COALESCE(MAX(display_order), -1) as m FROM menu_categories WHERE restaurant_id = ?",
+            (restaurant_id,),
+        ).fetchone()["m"]
+        menu_rows = db.execute(
+            "SELECT id, name FROM menu_items WHERE restaurant_id = ?",
+            (restaurant_id,),
+        ).fetchall()
+        menu_by_norm = {_norm_name(m["name"]): m["id"] for m in menu_rows}
+
+        def ensure_category_id(raw_name: str) -> int | None:
+            nonlocal max_display
+            if not raw_name:
+                return None
+            key = _norm_name(raw_name)
+            if not key:
+                return None
+            if key in category_map:
+                return category_map[key]
+            max_display += 1
+            cur = db.execute(
+                "INSERT INTO menu_categories (restaurant_id, name, display_order) VALUES (?, ?, ?)",
+                (restaurant_id, raw_name.strip(), max_display),
+            )
+            category_map[key] = cur.lastrowid
+            return cur.lastrowid
+
+        for item in items:
+            name = (item.get("name") or "").strip()
+            if not name:
+                skipped += 1
+                continue
+            key = _norm_name(name)
+            if not key:
+                skipped += 1
+                continue
+            image_url = (item.get("image_url") or None)
+            category_id = ensure_category_id(item.get("category", "Other"))
+            existing_id = menu_by_norm.get(key)
+            if existing_id:
+                db.execute(
+                    """UPDATE menu_items
+                       SET description = ?, price = ?, category_id = ?, image_url = ?, source = ?, updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (
+                        item.get("description") or None,
+                        float(item.get("price") or 0),
+                        category_id,
+                        image_url,
+                        "deliveroo",
+                        existing_id,
+                    ),
+                )
+                updated += 1
+            else:
+                cur = db.execute(
+                    """INSERT INTO menu_items
+                       (restaurant_id, category_id, name, description, price, image_url, source)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        restaurant_id,
+                        category_id,
+                        name,
+                        item.get("description") or None,
+                        float(item.get("price") or 0),
+                        image_url,
+                        "deliveroo",
+                    ),
+                )
+                menu_by_norm[key] = cur.lastrowid
+                imported += 1
+    return {
+        "items": items,
+        "count": len(items),
+        "source": "deliveroo",
+        "mode": "import",
+        "imported": imported,
+        "updated": updated,
+        "skipped": skipped,
+    }
 
 
 @router.get("/stats")
