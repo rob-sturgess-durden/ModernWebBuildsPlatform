@@ -57,19 +57,24 @@ def send_verification_code(body: dict = Body(...)):
             (phone or None, email or None, code, expires.isoformat()),
         )
 
-    channel = None
+    # Try email first (most reliable), then SMS. Return channel=None if neither works
+    # so the frontend can bypass verification gracefully.
     if email:
-        send_email(
+        ok = send_email(
             email,
             "Your ForkIt verification code",
             f"Your verification code is: {code}\n\nThis code expires in 10 minutes.",
         )
-        channel = "email"
-    elif phone:
-        send_sms(phone, f"Your ForkIt verification code is: {code}")
-        channel = "sms"
+        if ok:
+            return {"ok": True, "channel": "email"}
 
-    return {"ok": True, "channel": channel}
+    if phone:
+        ok = send_sms(phone, f"Your ForkIt verification code is: {code}")
+        if ok:
+            return {"ok": True, "channel": "sms"}
+
+    # Neither channel worked — caller should bypass verification
+    return {"ok": True, "channel": None}
 
 
 @router.post("/verify-code")

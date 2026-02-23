@@ -342,6 +342,14 @@ export function getSuperadminMessages(token, options = {}) {
   return request(`/superadmin/messages${suffix}`, { headers: superHeaders(token) });
 }
 
+export function superadminReplyEmail(token, { to_email, subject, body }) {
+  return request("/superadmin/messages/reply", {
+    method: "POST",
+    body: JSON.stringify({ to_email, subject, body }),
+    headers: superHeaders(token),
+  });
+}
+
 export function superPlacesSearch(token, { q, lat = null, lng = null, radius_m = null, limit = 12 } = {}) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);

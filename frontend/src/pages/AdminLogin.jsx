@@ -11,6 +11,26 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Auto-login via ?token=ADMIN_TOKEN query param (quick link from superadmin)
+  useEffect(() => {
+    const directToken = searchParams.get("token");
+    if (!directToken) return;
+    setMode("verifying");
+    setError(null);
+    adminLogin(directToken)
+      .then((result) => {
+        localStorage.setItem("admin_token", directToken);
+        localStorage.setItem("admin_restaurant", JSON.stringify(result));
+        setSearchParams({}, { replace: true });
+        navigate("/admin/dashboard");
+      })
+      .catch((_err) => {
+        setError("Invalid or expired token in the login link.");
+        setMode("token");
+        setSearchParams({}, { replace: true });
+      });
+  }, []);
+
   // Auto-verify magic link on page load
   useEffect(() => {
     const magicToken = searchParams.get("magic");

@@ -116,7 +116,7 @@ def _row_to_admin(row, db) -> dict:
         admin_token=row["admin_token"],
         theme=row["theme"],
         deliveroo_url=row["deliveroo_url"],
-        justeat_url=row.get("justeat_url"),
+        justeat_url=row["justeat_url"] if "justeat_url" in row.keys() else None,
         is_active=bool(row["is_active"]),
         status=row["status"] if "status" in row.keys() and row["status"] else "live",
         preview_password=row["preview_password"] if "preview_password" in row.keys() else None,
@@ -297,7 +297,8 @@ def update_restaurant(restaurant_id: int, body: dict | str = Body(...), authoriz
 def delete_restaurant(restaurant_id: int, authorization: str = Header(...)):
     _require_superadmin(authorization)
     with get_db() as db:
-        # Delete related data first
+        # Delete related data first (respecting FK constraints)
+        db.execute("DELETE FROM reviews WHERE restaurant_id = ?", (restaurant_id,))
         db.execute(
             "DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE restaurant_id = ?)",
             (restaurant_id,),
@@ -305,6 +306,10 @@ def delete_restaurant(restaurant_id: int, authorization: str = Header(...)):
         db.execute("DELETE FROM orders WHERE restaurant_id = ?", (restaurant_id,))
         db.execute("DELETE FROM menu_items WHERE restaurant_id = ?", (restaurant_id,))
         db.execute("DELETE FROM menu_categories WHERE restaurant_id = ?", (restaurant_id,))
+        db.execute("DELETE FROM gallery_images WHERE restaurant_id = ?", (restaurant_id,))
+        db.execute("DELETE FROM marketing_signups WHERE restaurant_id = ?", (restaurant_id,))
+        db.execute("DELETE FROM magic_links WHERE restaurant_id = ?", (restaurant_id,))
+        db.execute("DELETE FROM credit_log WHERE restaurant_id = ?", (restaurant_id,))
         deleted = db.execute("DELETE FROM restaurants WHERE id = ?", (restaurant_id,)).rowcount
     if not deleted:
         raise HTTPException(status_code=404, detail="Restaurant not found")
@@ -514,6 +519,32 @@ def list_messages(
         )
         for r in rows
     ]
+
+
+@router.post("/messages/reply")
+def reply_to_email(body: dict = Body(...), authorization: str = Header(...)):
+    """Send an email reply from the superadmin inbox."""
+    _require_superadmin(authorization)
+    to_email = (body.get("to_email") or "").strip()
+    subject = (body.get("subject") or "").strip() or "Re: (no subject)"
+    reply_body = (body.get("body") or "").strip()
+    if not to_email or not reply_body:
+        raise HTTPException(status_code=422, detail="to_email and body are required")
+
+    from ..services.notification import send_email
+    ok = send_email(to_email, subject, reply_body)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to send email — check SendGrid/SMTP config")
+
+    from_addr = config.SENDGRID_FROM or config.SMTP_FROM or "system"
+    with get_db() as db:
+        db.execute(
+            """INSERT INTO inbound_messages
+               (provider, channel, direction, from_addr, to_addr, subject, body_text, status)
+               VALUES ('sendgrid', 'email', 'outbound', ?, ?, ?, ?, 'ok')""",
+            (from_addr, to_email, subject, reply_body),
+        )
+    return {"ok": True}
 
 
 @router.get("/places/search")

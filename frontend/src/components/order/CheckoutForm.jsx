@@ -130,6 +130,7 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
   const [codeInput, setCodeInput] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState(null);
+  const [waCheckResult, setWaCheckResult] = useState(null); // null | true | false — WhatsApp verify poll result
 
   const stripPhonePrefix = (phone) => {
     let s = String(phone || "");
@@ -180,8 +181,13 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
     setVerifyError(null);
     try {
       const result = await sendVerificationCode(phone, email);
-      setCodeSent(true);
-      setCodeChannel(result.channel);
+      if (result.channel) {
+        setCodeSent(true);
+        setCodeChannel(result.channel);
+      } else {
+        // Neither SMS nor email is configured — bypass verification so order can proceed
+        setVerified(true);
+      }
     } catch (err) {
       setVerifyError(err.message);
     } finally {
@@ -200,6 +206,24 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
         setVerified(true);
       } else {
         setVerifyError("Incorrect code. Please try again.");
+      }
+    } catch (err) {
+      setVerifyError(err.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleCheckWhatsappVerified = async () => {
+    const phone = normalizePhone(form.customer_phone);
+    setVerifying(true);
+    setWaCheckResult(null);
+    try {
+      const result = await checkVerified(phone, "");
+      if (result.verified) {
+        setVerified(true);
+      } else {
+        setWaCheckResult(false);
       }
     } catch (err) {
       setVerifyError(err.message);
@@ -314,10 +338,8 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
   };
 
   // Determine what channel to show for verification
-  const verifyTarget = (form.customer_email || "").trim()
-    ? form.customer_email.trim()
-    : normalizePhone(form.customer_phone);
-  const verifyChannelLabel = (form.customer_email || "").trim() ? "email" : "SMS";
+  const hasEmail = !!(form.customer_email || "").trim();
+  const verifyTarget = hasEmail ? form.customer_email.trim() : normalizePhone(form.customer_phone);
 
   return (
     <div className="contact-card" style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -345,13 +367,13 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
             <span
               style={{
                 padding: "0.6rem 0.7rem",
-                background: "var(--bg-soft, #f5f5f5)",
+                background: "var(--bg-soft, #f0f0f0)",
                 border: "1px solid var(--border, #ddd)",
                 borderRight: "none",
                 borderRadius: "8px 0 0 8px",
                 fontSize: "0.95rem",
-                fontWeight: 600,
-                color: "var(--text-light)",
+                fontWeight: 700,
+                color: "var(--ink)",
                 whiteSpace: "nowrap",
                 lineHeight: 1.4,
               }}
@@ -360,38 +382,37 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
             </span>
             <input
               type="tel"
+              inputMode="numeric"
               value={form.customer_phone}
               onChange={(e) => {
-                const val = e.target.value.replace(/[^\d\s]/g, "");
+                let val = e.target.value.replace(/\D/g, "");
+                // Strip pasted country code (+44 or 44)
+                if (val.startsWith("44") && val.length > 10) val = val.slice(2);
+                // Strip leading 0 (e.g. 07700… → 7700…)
+                if (val.startsWith("0")) val = val.slice(1);
+                // Cap at 10 digits (UK local number length)
+                val = val.slice(0, 10);
                 setForm({ ...form, customer_phone: val });
                 setVerified(null);
                 setCodeSent(false);
               }}
               placeholder="7700 900000"
+              maxLength={10}
               required
-              style={{ borderRadius: "0 8px 8px 0", borderLeft: "none" }}
+              style={{
+                borderRadius: "0 8px 8px 0",
+                borderLeft: "none",
+                borderColor: form.customer_phone.length > 0 && form.customer_phone.length !== 10
+                  ? "#f59e0b"
+                  : undefined,
+              }}
             />
           </div>
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              marginTop: "0.5rem",
-              fontSize: "0.85rem",
-              color: "var(--text-light)",
-              cursor: "pointer",
-              fontWeight: 400,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={form.sms_optin}
-              onChange={(e) => setForm({ ...form, sms_optin: e.target.checked, ...(e.target.checked ? { whatsapp_optin: false } : {}) })}
-              style={{ width: "auto", margin: 0 }}
-            />
-            Notify me by SMS when my order is updated
-          </label>
+          {form.customer_phone.length > 0 && form.customer_phone.length !== 10 && (
+            <p style={{ fontSize: "0.8rem", color: "#b45309", marginTop: 4 }}>
+              Enter 10 digits after +44 (e.g. 7700 900000)
+            </p>
+          )}
           <label
             style={{
               display: "flex",
@@ -518,63 +539,97 @@ export default function CheckoutForm({ restaurant = null, onSuccess, onCancel })
               <p style={{ color: "#e53e3e", fontSize: "0.85rem", marginBottom: "0.75rem" }}>{verifyError}</p>
             )}
 
-            {!codeSent ? (
-              <>
-                <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
-                  We'll send a 4-digit code to <strong>{verifyTarget}</strong> via {verifyChannelLabel}.
-                </p>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={handleSendCode}
-                  disabled={verifying}
-                  style={{ width: "100%" }}
-                >
-                  {verifying ? "Sending..." : `Send code via ${verifyChannelLabel}`}
-                </button>
-              </>
-            ) : (
-              <>
-                <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
-                  We sent a code to <strong>{verifyTarget}</strong>. Enter it below.
-                </p>
-                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={4}
-                    value={codeInput}
-                    onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                    placeholder="1234"
-                    autoFocus
-                    style={{
-                      textAlign: "center",
-                      fontSize: "1.3rem",
-                      letterSpacing: "0.3em",
-                      fontWeight: 700,
-                      width: 140,
-                    }}
-                  />
+            {hasEmail ? (
+              // Email code flow
+              !codeSent ? (
+                <>
+                  <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
+                    We'll send a 4-digit code to <strong>{verifyTarget}</strong> via email.
+                  </p>
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={handleVerifyCode}
-                    disabled={verifying || codeInput.length < 4}
+                    onClick={handleSendCode}
+                    disabled={verifying}
+                    style={{ width: "100%" }}
                   >
-                    {verifying ? "Checking..." : "Verify"}
+                    {verifying ? "Sending..." : "Send code via email"}
                   </button>
-                </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
+                    We sent a code to <strong>{verifyTarget}</strong>. Enter it below.
+                  </p>
+                  <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={codeInput}
+                      onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                      placeholder="1234"
+                      autoFocus
+                      style={{
+                        textAlign: "center",
+                        fontSize: "1.3rem",
+                        letterSpacing: "0.3em",
+                        fontWeight: 700,
+                        width: 140,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={handleVerifyCode}
+                      disabled={verifying || codeInput.length < 4}
+                    >
+                      {verifying ? "Checking..." : "Verify"}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setCodeSent(false); setCodeInput(""); setVerifyError(null); }}
+                    style={{
+                      background: "none", border: "none", color: "var(--accent)",
+                      cursor: "pointer", fontSize: "0.85rem", marginTop: "0.75rem",
+                      textDecoration: "underline", padding: 0,
+                    }}
+                  >
+                    Resend code
+                  </button>
+                </>
+              )
+            ) : (
+              // WhatsApp verification flow
+              <>
+                <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.75rem" }}>
+                  Send us a WhatsApp message to verify your number — it only takes a second:
+                </p>
+                <a
+                  href="https://wa.me/447882957289?text=Hi%2C%20please%20verify%20my%20number"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-primary"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: "0.75rem", textDecoration: "none" }}
+                >
+                  <i className="fab fa-whatsapp" style={{ fontSize: "1.1rem" }} />
+                  Open WhatsApp to verify
+                </a>
                 <button
                   type="button"
-                  onClick={() => { setCodeSent(false); setCodeInput(""); setVerifyError(null); }}
-                  style={{
-                    background: "none", border: "none", color: "var(--accent)",
-                    cursor: "pointer", fontSize: "0.85rem", marginTop: "0.75rem",
-                    textDecoration: "underline", padding: 0,
-                  }}
+                  className="btn"
+                  onClick={handleCheckWhatsappVerified}
+                  disabled={verifying}
+                  style={{ width: "100%", background: "var(--bg-soft)", border: "1px solid var(--border)" }}
                 >
-                  Resend code
+                  {verifying ? "Checking..." : "I've sent it — verify me"}
                 </button>
+                {waCheckResult === false && (
+                  <p style={{ color: "#b45309", fontSize: "0.85rem", marginTop: "0.5rem" }}>
+                    Not verified yet — please send the WhatsApp message first, then try again.
+                  </p>
+                )}
               </>
             )}
           </div>

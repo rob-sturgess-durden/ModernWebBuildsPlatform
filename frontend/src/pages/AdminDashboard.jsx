@@ -502,7 +502,19 @@ export default function AdminDashboard() {
           </div>
           <p style={{ color: "var(--text-light)" }}>Restaurant Admin Dashboard</p>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={handleLogout}>Logout</button>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <button
+            className="btn btn-outline btn-sm"
+            title="Copy your direct admin login link"
+            onClick={() => {
+              const link = `${window.location.origin}/admin?token=${encodeURIComponent(token)}`;
+              navigator.clipboard.writeText(link);
+            }}
+          >
+            Copy Login Link
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={handleLogout}>Logout</button>
+        </div>
       </div>
 
       {/* Tab bar */}

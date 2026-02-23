@@ -6,7 +6,11 @@ from fastapi.responses import PlainTextResponse
 from .. import config
 from ..database import get_db
 from ..services.order_service import advance_order_status
-from ..services.notification import notify_customer_status
+from ..services.notification import notify_customer_status, send_email
+
+FORWARD_ADDRESSES = {
+    "hello@forkitt.com": "rob.sturgessdurden@gmail.com",
+}
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks/sendgrid", tags=["webhooks"])
@@ -46,6 +50,36 @@ async def sendgrid_inbound(request: Request, background_tasks: BackgroundTasks):
     from_email = str(form.get("from", "") or "")
     to_email = str(form.get("to", "") or "")
     message_id = str(form.get("message_id", "") or "")
+
+    # Forward emails sent to known forward addresses
+    to_lower = to_email.lower()
+    for inbox, forward_to in FORWARD_ADDRESSES.items():
+        if inbox in to_lower:
+            fwd_subject = f"Fwd [{inbox}]: {subject}" if subject else f"Fwd [{inbox}]"
+            fwd_body = (
+                f"-------- Forwarded message --------\n"
+                f"From: {from_email}\n"
+                f"To: {to_email}\n"
+                f"Subject: {subject}\n\n"
+                f"{text or html or '(no body)'}"
+            )
+            send_email(forward_to, fwd_subject, fwd_body)
+            logger.info("Forwarded email from=%s to=%s -> %s", from_email, inbox, forward_to)
+            with get_db() as db:
+                db.execute(
+                    """INSERT INTO inbound_messages
+                       (provider, channel, direction, from_addr, to_addr, subject, body_text, body_html, status, meta_json)
+                       VALUES ('sendgrid', 'email', 'inbound', ?, ?, ?, ?, ?, 'forwarded', ?)""",
+                    (
+                        from_email,
+                        to_email,
+                        subject[:500],
+                        text[:10000],
+                        html[:20000],
+                        json.dumps({"message_id": message_id, "forwarded_to": forward_to}),
+                    ),
+                )
+            return f"forwarded to {forward_to}"
 
     haystack = "\n".join([subject, text, html])
     m = ORDER_RE.search(haystack)

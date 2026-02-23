@@ -200,8 +200,6 @@ export default function RestaurantPage() {
         </div>
       </section>
 
-      <DealsSignup restaurant={restaurant} />
-
       {instagram.length > 0 ? (
         <InstagramFeed posts={instagram} handle={restaurant.instagram_handle} />
       ) : gallery.length > 0 ? (
@@ -305,24 +303,32 @@ export default function RestaurantPage() {
                   </div>
                 )}
                 <Basket onCheckout={() => { setCheckout(true); window.scrollTo(0, 0); }} />
-                <div className="contact-card">
-                  <p className="meta-title">Find us</p>
-                  <MapWidget
-                    lat={restaurant.latitude}
-                    lng={restaurant.longitude}
-                    name={restaurant.name}
-                    address={restaurant.address}
-                  />
-                  <p style={{ marginTop: "0.8rem", color: "var(--text-light)", fontSize: "0.9rem" }}>
-                    {restaurant.address}
-                  </p>
-                  <OpeningHours openingHours={restaurant.opening_hours} />
-                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Map + opening hours */}
+      <section className="section" style={{ padding: "0 6vw 48px" }}>
+        <div className="container">
+          <div className="contact-card">
+            <p className="meta-title">Find us</p>
+            <MapWidget
+              lat={restaurant.latitude}
+              lng={restaurant.longitude}
+              name={restaurant.name}
+              address={restaurant.address}
+            />
+            <p style={{ marginTop: "0.8rem", color: "var(--text-light)", fontSize: "0.9rem" }}>
+              {restaurant.address}
+            </p>
+            <OpeningHours openingHours={restaurant.opening_hours} />
+          </div>
+        </div>
+      </section>
+
+      <DealsSignup restaurant={restaurant} />
 
       {/* Floating mobile basket bar */}
       {totalItems > 0 && !checkout && (

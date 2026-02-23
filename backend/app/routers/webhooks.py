@@ -64,6 +64,9 @@ async def twilio_whatsapp_webhook(request: Request):
         set_whatsapp_optin(from_number, True, source="twilio_quick_reply")
         response_text = "Thanks! You'll now receive order updates via WhatsApp. Reply STOP to opt out."
 
+    # Strip "whatsapp:" prefix to get the plain E.164 number
+    phone_clean = from_number.replace("whatsapp:", "").strip()
+
     with get_db() as db:
         db.execute(
             """INSERT INTO inbound_messages
@@ -80,6 +83,15 @@ async def twilio_whatsapp_webhook(request: Request):
                 }),
             ),
         )
+        # Mark the sender as verified (any inbound WhatsApp proves they own the number)
+        if phone_clean:
+            existing = db.execute(
+                "SELECT id FROM verified_customers WHERE phone = ?", (phone_clean,)
+            ).fetchone()
+            if not existing:
+                db.execute(
+                    "INSERT INTO verified_customers (phone) VALUES (?)", (phone_clean,)
+                )
 
     if response_text:
         # Minimal TwiML reply.

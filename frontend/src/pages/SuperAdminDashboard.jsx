@@ -4,6 +4,7 @@ import {
   getSuperadminStats,
   getSuperadminRestaurants,
   getSuperadminMessages,
+  superadminReplyEmail,
   superPlacesSearch,
   superPlacesImport,
   superPlacesPhoto,
@@ -26,6 +27,10 @@ export default function SuperAdminDashboard() {
   const [restaurants, setRestaurants] = useState([]);
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [msgTab, setMsgTab] = useState("email"); // "email" | "sms"
+  const [expandedMsg, setExpandedMsg] = useState(null); // message id
+  const [msgSort, setMsgSort] = useState({ col: "id", dir: "desc" });
+  const [replyState, setReplyState] = useState({}); // { [id]: { body, subject, sending, ok, err } }
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverQuery, setDiscoverQuery] = useState("restaurants near me");
   const [discoverLat, setDiscoverLat] = useState("");
@@ -319,9 +324,10 @@ export default function SuperAdminDashboard() {
       {/* Messages view */}
       {view === "messages" && (
         <div>
+          {/* Toolbar */}
           <div className="card" style={{ marginBottom: "1rem" }}>
             <div style={{ display: "flex", gap: "0.8rem", alignItems: "center", flexWrap: "wrap" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: 0 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: 0, whiteSpace: "nowrap" }}>
                 <input
                   type="checkbox"
                   checked={ordersOnly}
@@ -333,68 +339,284 @@ export default function SuperAdminDashboard() {
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search from/to/subject/body"
-                style={{ flex: 1, minWidth: 240 }}
+                placeholder="Search from / subject / body…"
+                style={{ flex: 1, minWidth: 220 }}
               />
               <button className="btn btn-outline btn-sm" onClick={loadMessages} disabled={messagesLoading}>
-                {messagesLoading ? "Refreshing..." : "Refresh"}
+                {messagesLoading ? "Refreshing…" : "Refresh"}
               </button>
             </div>
           </div>
 
-          {messagesLoading ? (
-            <div className="loading">Loading messages...</div>
-          ) : messages.length === 0 ? (
-            <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>
-              No inbound messages yet.
-            </p>
-          ) : (
-            <div className="grid grid-2">
-              {messages.map((m) => (
-                <div key={m.id} className="card">
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem", marginBottom: "0.5rem" }}>
-                    <div>
-                      <div style={{ fontWeight: 700 }}>
-                        {m.provider}/{m.channel} <span style={{ color: "var(--text-light)", fontWeight: 500 }}>({m.direction})</span>
-                      </div>
-                      <div style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
-                        {m.created_at}
-                      </div>
-                    </div>
-                    {m.status && <span className={`badge ${m.status === "ok" ? "status-ready" : "status-pending"}`}>{m.status}</span>}
-                  </div>
+          {/* Channel tabs */}
+          {(() => {
+            const emailMsgs = messages.filter((m) => m.channel === "email");
+            const smsMsgs   = messages.filter((m) => m.channel !== "email");
 
-                  {m.order_number && (
-                    <div style={{ marginBottom: "0.5rem" }}>
-                      <strong>Order:</strong>{" "}
-                      <a href={`/order/${m.order_number}`} target="_blank" rel="noreferrer">
-                        {m.order_number}
-                      </a>
-                      {m.action && <span style={{ color: "var(--text-light)" }}> · {m.action}</span>}
-                    </div>
-                  )}
+            const sortedEmail = [...emailMsgs].sort((a, b) => {
+              const { col, dir } = msgSort;
+              const av = a[col] ?? "";
+              const bv = b[col] ?? "";
+              const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+              return dir === "asc" ? cmp : -cmp;
+            });
 
-                  {m.subject && (
-                    <div style={{ marginBottom: "0.5rem" }}>
-                      <strong>Subject:</strong> {m.subject}
-                    </div>
-                  )}
+            const toggleSort = (col) =>
+              setMsgSort((s) => ({ col, dir: s.col === col && s.dir === "desc" ? "asc" : "desc" }));
 
-                  <div style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>
-                    <div><strong>From:</strong> {m.from_addr || "-"}</div>
-                    <div><strong>To:</strong> {m.to_addr || "-"}</div>
-                  </div>
+            const sortArrow = (col) =>
+              msgSort.col !== col ? null : msgSort.dir === "asc" ? " ▲" : " ▼";
 
-                  {m.body_text && (
-                    <div style={{ marginTop: "0.8rem", fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>
-                      {m.body_text.slice(0, 600)}
-                      {m.body_text.length > 600 ? "..." : ""}
-                    </div>
-                  )}
+            const fmtDate = (s) => {
+              if (!s) return "-";
+              try { return new Date(s).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }); }
+              catch { return s; }
+            };
+
+            const handleReply = async (m) => {
+              const r = replyState[m.id] || {};
+              if (!r.body?.trim()) return;
+              setReplyState((prev) => ({ ...prev, [m.id]: { ...r, sending: true, ok: false, err: null } }));
+              try {
+                await superadminReplyEmail(token, {
+                  to_email: m.from_addr,
+                  subject: r.subject || `Re: ${m.subject || "(no subject)"}`,
+                  body: r.body,
+                });
+                setReplyState((prev) => ({ ...prev, [m.id]: { ...r, body: "", sending: false, ok: true, err: null } }));
+              } catch (e) {
+                setReplyState((prev) => ({ ...prev, [m.id]: { ...r, sending: false, ok: false, err: e.message } }));
+              }
+            };
+
+            const thStyle = (col) => ({
+              padding: "8px 12px",
+              textAlign: "left",
+              fontWeight: 600,
+              fontSize: "0.78rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              color: "var(--text-light)",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              userSelect: "none",
+              borderBottom: "2px solid var(--border, #e5e7eb)",
+            });
+
+            return (
+              <>
+                {/* Tab row */}
+                <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1rem" }}>
+                  {[
+                    { key: "email", label: "Email", count: emailMsgs.length },
+                    { key: "sms",   label: "SMS / WhatsApp", count: smsMsgs.length },
+                  ].map(({ key, label, count }) => (
+                    <button
+                      key={key}
+                      className={`btn btn-sm ${msgTab === key ? "btn-primary" : "btn-outline"}`}
+                      onClick={() => setMsgTab(key)}
+                    >
+                      {label} <span style={{ opacity: 0.7, marginLeft: 4 }}>({count})</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+
+                {messagesLoading ? (
+                  <div className="loading">Loading messages…</div>
+                ) : msgTab === "email" ? (
+                  /* ── EMAIL INBOX ── */
+                  sortedEmail.length === 0 ? (
+                    <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>No email messages.</p>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                        <thead>
+                          <tr style={{ background: "var(--bg-soft, #f8f8f8)" }}>
+                            <th style={thStyle("direction")} onClick={() => toggleSort("direction")}>Dir{sortArrow("direction")}</th>
+                            <th style={thStyle("from_addr")} onClick={() => toggleSort("from_addr")}>From{sortArrow("from_addr")}</th>
+                            <th style={{ ...thStyle("subject"), width: "100%" }} onClick={() => toggleSort("subject")}>Subject{sortArrow("subject")}</th>
+                            <th style={thStyle("created_at")} onClick={() => toggleSort("created_at")}>Date{sortArrow("created_at")}</th>
+                            <th style={thStyle("order_number")} onClick={() => toggleSort("order_number")}>Order{sortArrow("order_number")}</th>
+                            <th style={thStyle("status")} onClick={() => toggleSort("status")}>Status{sortArrow("status")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedEmail.map((m) => {
+                            const expanded = expandedMsg === m.id;
+                            const r = replyState[m.id] || {};
+                            return (
+                              <>
+                                <tr
+                                  key={m.id}
+                                  onClick={() => setExpandedMsg(expanded ? null : m.id)}
+                                  style={{
+                                    cursor: "pointer",
+                                    borderBottom: "1px solid var(--border, #e5e7eb)",
+                                    background: expanded ? "var(--bg-soft, #f8fafc)" : "var(--card-bg, #fff)",
+                                    transition: "background 120ms",
+                                  }}
+                                >
+                                  <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                                    <span style={{
+                                      fontSize: "0.72rem", fontWeight: 700, padding: "2px 7px", borderRadius: 999,
+                                      background: m.direction === "inbound" ? "#dbeafe" : "#dcfce7",
+                                      color: m.direction === "inbound" ? "#1d4ed8" : "#166534",
+                                    }}>
+                                      {m.direction === "inbound" ? "IN" : "OUT"}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: "10px 12px", whiteSpace: "nowrap", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {m.direction === "inbound" ? (m.from_addr || "-") : (m.to_addr || "-")}
+                                  </td>
+                                  <td style={{ padding: "10px 12px" }}>
+                                    {m.subject || <span style={{ color: "var(--text-light)" }}>(no subject)</span>}
+                                  </td>
+                                  <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "var(--text-light)", fontSize: "0.82rem" }}>
+                                    {fmtDate(m.created_at)}
+                                  </td>
+                                  <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                                    {m.order_number
+                                      ? <a href={`/order/${m.order_number}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{m.order_number}</a>
+                                      : <span style={{ color: "var(--text-light)" }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: "10px 12px" }}>
+                                    {m.status && (
+                                      <span className={`badge ${m.status === "ok" ? "status-ready" : "status-pending"}`}>{m.status}</span>
+                                    )}
+                                  </td>
+                                </tr>
+                                {expanded && (
+                                  <tr key={`${m.id}-exp`} style={{ background: "var(--bg-soft, #f8fafc)" }}>
+                                    <td colSpan={6} style={{ padding: "0 16px 16px 40px" }}>
+                                      {/* Message body */}
+                                      <div style={{
+                                        marginTop: 12,
+                                        padding: "12px 16px",
+                                        background: "var(--card-bg, #fff)",
+                                        border: "1px solid var(--border, #e5e7eb)",
+                                        borderRadius: 10,
+                                        fontSize: "0.88rem",
+                                        whiteSpace: "pre-wrap",
+                                        maxHeight: 280,
+                                        overflowY: "auto",
+                                        color: "var(--ink)",
+                                      }}>
+                                        {m.body_text || <em style={{ color: "var(--text-light)" }}>No body</em>}
+                                      </div>
+
+                                      {/* Reply box — only for inbound */}
+                                      {m.direction === "inbound" && m.from_addr && (
+                                        <div style={{ marginTop: 12, borderLeft: "3px solid var(--primary, #2563eb)", paddingLeft: 14 }}>
+                                          <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                                            <span style={{ fontSize: "0.82rem", color: "var(--text-light)", paddingTop: 6 }}>
+                                              To: <strong style={{ color: "var(--ink)" }}>{m.from_addr}</strong>
+                                            </span>
+                                            <input
+                                              value={r.subject ?? `Re: ${m.subject || "(no subject)"}`}
+                                              onChange={(e) =>
+                                                setReplyState((prev) => ({ ...prev, [m.id]: { ...r, subject: e.target.value } }))
+                                              }
+                                              placeholder="Subject"
+                                              style={{ flex: 1, minWidth: 200, fontSize: "0.85rem", padding: "4px 8px" }}
+                                            />
+                                          </div>
+                                          <textarea
+                                            rows={4}
+                                            value={r.body ?? ""}
+                                            onChange={(e) =>
+                                              setReplyState((prev) => ({ ...prev, [m.id]: { ...r, body: e.target.value } }))
+                                            }
+                                            placeholder="Type your reply…"
+                                            style={{ width: "100%", fontSize: "0.88rem", padding: "8px 10px", resize: "vertical", boxSizing: "border-box" }}
+                                          />
+                                          <div style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}>
+                                            <button
+                                              className="btn btn-primary btn-sm"
+                                              disabled={r.sending || !r.body?.trim()}
+                                              onClick={() => handleReply(m)}
+                                            >
+                                              {r.sending ? "Sending…" : "Send Reply"}
+                                            </button>
+                                            {r.ok && <span style={{ color: "#16a34a", fontSize: "0.85rem" }}>✓ Sent</span>}
+                                            {r.err && <span style={{ color: "#dc2626", fontSize: "0.85rem" }}>✗ {r.err}</span>}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )}
+                              </>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                ) : (
+                  /* ── SMS / WHATSAPP ── */
+                  smsMsgs.length === 0 ? (
+                    <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>No SMS / WhatsApp messages.</p>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
+                        <thead>
+                          <tr style={{ background: "var(--bg-soft, #f8f8f8)" }}>
+                            <th style={thStyle("channel")}>Channel</th>
+                            <th style={thStyle("direction")}>Dir</th>
+                            <th style={thStyle("from_addr")}>From</th>
+                            <th style={thStyle("to_addr")}>To</th>
+                            <th style={{ ...thStyle("body_text"), width: "100%" }}>Message</th>
+                            <th style={thStyle("created_at")}>Date</th>
+                            <th style={thStyle("order_number")}>Order</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {smsMsgs.map((m) => (
+                            <tr
+                              key={m.id}
+                              style={{ borderBottom: "1px solid var(--border, #e5e7eb)", verticalAlign: "top" }}
+                            >
+                              <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                                <span style={{
+                                  fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                                  background: m.channel === "whatsapp" ? "#dcfce7" : "#f0f9ff",
+                                  color: m.channel === "whatsapp" ? "#15803d" : "#0369a1",
+                                }}>
+                                  {m.channel === "whatsapp" ? "WhatsApp" : "SMS"}
+                                </span>
+                              </td>
+                              <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                                <span style={{
+                                  fontSize: "0.72rem", fontWeight: 700, padding: "2px 7px", borderRadius: 999,
+                                  background: m.direction === "inbound" ? "#dbeafe" : "#dcfce7",
+                                  color: m.direction === "inbound" ? "#1d4ed8" : "#166534",
+                                }}>
+                                  {m.direction === "inbound" ? "IN" : "OUT"}
+                                </span>
+                              </td>
+                              <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontSize: "0.83rem" }}>{m.from_addr || "—"}</td>
+                              <td style={{ padding: "9px 12px", whiteSpace: "nowrap", fontSize: "0.83rem" }}>{m.to_addr || "—"}</td>
+                              <td style={{ padding: "9px 12px", fontSize: "0.85rem", color: "var(--ink)" }}>
+                                {(m.body_text || "").slice(0, 180)}{(m.body_text || "").length > 180 ? "…" : ""}
+                              </td>
+                              <td style={{ padding: "9px 12px", whiteSpace: "nowrap", color: "var(--text-light)", fontSize: "0.82rem" }}>
+                                {fmtDate(m.created_at)}
+                              </td>
+                              <td style={{ padding: "9px 12px", whiteSpace: "nowrap" }}>
+                                {m.order_number
+                                  ? <a href={`/order/${m.order_number}`} target="_blank" rel="noreferrer">{m.order_number}</a>
+                                  : <span style={{ color: "var(--text-light)" }}>—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -720,6 +942,25 @@ export default function SuperAdminDashboard() {
               <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(r)}>Edit</button>
               <button className="btn btn-warning btn-sm" onClick={() => handleRegenToken(r.id)}>New Token</button>
               <a href={`/${r.slug}`} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">View Site</a>
+              <a
+                href={`/admin?token=${encodeURIComponent(r.admin_token)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-outline btn-sm"
+                title="Open restaurant admin dashboard directly"
+              >
+                Quick Login
+              </a>
+              <button
+                className="btn btn-outline btn-sm"
+                title="Copy direct admin login link to clipboard"
+                onClick={() => {
+                  const link = `${window.location.origin}/admin?token=${encodeURIComponent(r.admin_token)}`;
+                  navigator.clipboard.writeText(link);
+                }}
+              >
+                Copy Link
+              </button>
               <button className="btn btn-danger btn-sm" onClick={() => handleDelete(r.id, r.name)}>Delete</button>
             </div>
           </div>
