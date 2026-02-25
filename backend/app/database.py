@@ -280,3 +280,16 @@ def init_db():
 
         # Indexes that depend on migrated columns must be created after migrations.
         db.execute("CREATE INDEX IF NOT EXISTS idx_restaurants_google_place_id ON restaurants(google_place_id)")
+
+        # Email templates (outreach)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS email_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                subject TEXT NOT NULL DEFAULT '',
+                body TEXT NOT NULL DEFAULT '',
+                from_email TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)

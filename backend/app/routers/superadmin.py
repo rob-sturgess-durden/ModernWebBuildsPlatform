@@ -528,15 +528,16 @@ def reply_to_email(body: dict = Body(...), authorization: str = Header(...)):
     to_email = (body.get("to_email") or "").strip()
     subject = (body.get("subject") or "").strip() or "Re: (no subject)"
     reply_body = (body.get("body") or "").strip()
+    from_email = (body.get("from_email") or "").strip() or None
     if not to_email or not reply_body:
         raise HTTPException(status_code=422, detail="to_email and body are required")
 
     from ..services.notification import send_email
-    ok = send_email(to_email, subject, reply_body)
+    ok = send_email(to_email, subject, reply_body, from_email=from_email)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to send email — check SendGrid/SMTP config")
 
-    from_addr = config.SENDGRID_FROM or config.SMTP_FROM or "system"
+    from_addr = from_email or config.SENDGRID_FROM or config.SMTP_FROM or "system"
     with get_db() as db:
         db.execute(
             """INSERT INTO inbound_messages
@@ -684,3 +685,180 @@ def places_import(
                 )
 
     return result
+
+
+@router.post("/places/fill/{restaurant_id}")
+def places_fill(
+    restaurant_id: int,
+    authorization: str = Header(...),
+):
+    """Search Google Places for an existing restaurant and update its images and text."""
+    _require_superadmin(authorization)
+
+    with get_db() as db:
+        row = db.execute("SELECT * FROM restaurants WHERE id = ?", (restaurant_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Restaurant not found")
+
+    name = row["name"]
+    lat = row["latitude"]
+    lng = row["longitude"]
+    address = row["address"] or ""
+
+    # Search Google Places using name + address for best match
+    query = f"{name} {address}".strip()
+    try:
+        results = google_places_service.search_text(
+            query,
+            lat=lat if lat else None,
+            lng=lng if lng else None,
+            radius_m=1000 if lat else None,
+            limit=5,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not results:
+        raise HTTPException(status_code=404, detail="No matching place found on Google Places")
+
+    # Use the first (best) result
+    place_id = results[0]["place_id"]
+
+    try:
+        details = google_places_service.get_details(place_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Download photos
+    photo_names = details.get("photo_names") or []
+    banner_url = None
+    gallery_urls: list[str] = []
+
+    for i, pname in enumerate(photo_names[:10]):
+        try:
+            kind = "banner" if i == 0 else "gallery"
+            max_px = 2400 if i == 0 else 1600
+            url = google_places_service.download_photo_to_upload(
+                pname, restaurant_id, kind=kind, max_px=max_px
+            )
+            if url and i == 0:
+                banner_url = url
+            elif url:
+                gallery_urls.append(url)
+        except Exception:
+            pass
+
+    # Try to fetch logo from the restaurant's website
+    logo_url = None
+    website = details.get("website")
+    if website:
+        try:
+            logo_url = google_places_service.fetch_website_logo(website, restaurant_id)
+        except Exception:
+            pass
+
+    # Build DB updates — always overwrite images, only fill text if currently empty
+    updates: dict = {}
+    if banner_url:
+        updates["banner_url"] = banner_url
+    if logo_url:
+        updates["logo_url"] = logo_url
+
+    editorial = details.get("editorial_summary")
+    about_updated = False
+    if editorial and not (row["about_text"] or "").strip():
+        updates["about_text"] = editorial
+        about_updated = True
+
+    if updates:
+        with get_db() as db:
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            db.execute(
+                f"UPDATE restaurants SET {set_clause} WHERE id = ?",
+                (*updates.values(), restaurant_id),
+            )
+
+    # Add gallery images (additive — don't wipe existing)
+    if gallery_urls:
+        with get_db() as db:
+            for order, url in enumerate(gallery_urls):
+                db.execute(
+                    "INSERT INTO gallery_images (restaurant_id, image_url, caption, display_order) "
+                    "VALUES (?, ?, NULL, ?)",
+                    (restaurant_id, url, order),
+                )
+
+    return {
+        "ok": True,
+        "place_name": details.get("name"),
+        "banner_updated": bool(banner_url),
+        "logo_updated": bool(logo_url),
+        "about_updated": about_updated,
+        "gallery_added": len(gallery_urls),
+        "banner_url": banner_url,
+        "logo_url": logo_url,
+        "about_text": updates.get("about_text"),
+    }
+
+
+# --- Email Templates ---
+
+@router.get("/email-templates")
+def list_email_templates(authorization: str = Header(...)):
+    _require_superadmin(authorization)
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT * FROM email_templates ORDER BY name ASC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/email-templates", status_code=201)
+def create_email_template(body: dict = Body(...), authorization: str = Header(...)):
+    _require_superadmin(authorization)
+    body = _coerce_json_object(body)
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="name is required")
+    subject = (body.get("subject") or "").strip()
+    tmpl_body = (body.get("body") or "").strip()
+    from_email = (body.get("from_email") or "").strip() or None
+    with get_db() as db:
+        cursor = db.execute(
+            "INSERT INTO email_templates (name, subject, body, from_email) VALUES (?, ?, ?, ?)",
+            (name, subject, tmpl_body, from_email),
+        )
+        row = db.execute("SELECT * FROM email_templates WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return dict(row)
+
+
+@router.put("/email-templates/{template_id}")
+def update_email_template(template_id: int, body: dict = Body(...), authorization: str = Header(...)):
+    _require_superadmin(authorization)
+    body = _coerce_json_object(body)
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="name is required")
+    subject = (body.get("subject") or "").strip()
+    tmpl_body = (body.get("body") or "").strip()
+    from_email = (body.get("from_email") or "").strip() or None
+    with get_db() as db:
+        updated = db.execute(
+            "UPDATE email_templates SET name=?, subject=?, body=?, from_email=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (name, subject, tmpl_body, from_email, template_id),
+        ).rowcount
+        if not updated:
+            raise HTTPException(status_code=404, detail="Template not found")
+        row = db.execute("SELECT * FROM email_templates WHERE id = ?", (template_id,)).fetchone()
+    return dict(row)
+
+
+@router.delete("/email-templates/{template_id}", status_code=204)
+def delete_email_template(template_id: int, authorization: str = Header(...)):
+    _require_superadmin(authorization)
+    with get_db() as db:
+        deleted = db.execute(
+            "DELETE FROM email_templates WHERE id = ?", (template_id,)
+        ).rowcount
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Template not found")

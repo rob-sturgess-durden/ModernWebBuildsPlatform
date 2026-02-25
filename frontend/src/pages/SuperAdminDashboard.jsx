@@ -8,6 +8,10 @@ import {
   superPlacesSearch,
   superPlacesImport,
   superPlacesPhoto,
+  superPlacesFill,
+  getEmailTemplates,
+  saveEmailTemplate,
+  deleteEmailTemplate,
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
@@ -17,6 +21,60 @@ import {
 } from "../api/client";
 
 const THEMES = ["modern", "classic", "dark"];
+
+const OUTREACH_SUBJECT = "We've set up a free online ordering page for [Restaurant Name] — take a look";
+const OUTREACH_BODY = `Hi [Owner Name],
+
+My name is Sam, and I'm the founder of ForkItt, a simple online ordering platform built specifically for independent restaurants.
+
+I've taken the liberty of setting up a page for [Restaurant Name] so you can see exactly what it would look like for you and your customers. No commitment!
+
+Your restaurant page:
+👉 https://forkitt.com/[slug]
+Password: [preview_password]
+
+Your owner dashboard:
+👉 https://forkitt.com/admin
+Login token: [admin_token]
+
+Here's how it works:
+
+Customers visit your page, browse your menu, and place a collection order in under a minute. When an order comes in, you get an instant notification by WhatsApp, email, whichever you prefer - with the customer's name, items, and their chosen pickup time. We plan to eventually take a small commission of 5% but only after a free months trial, we aim to oppose the extortionate cut that our competitors take from small businesses profits.
+
+From your dashboard you can:
+
+⏰ Set your availability so customers only see available pickup slots
+🎊 Directly contact your customers with offers.
+📋 Manage your menu — add items, set prices, mark things as unavailable
+⭐ See customer reviews left after collection
+📊 Track all your orders in one place
+
+Take a look at the page and the dashboard, and if you'd like to go live or have any questions, just reply to this email or WhatsApp me directly on [your number].
+
+Happy to jump on a quick call too if that's easier.
+
+Best,
+Sam
+ForkItt
+hello@forkitt.com
+35253252`;
+
+function fillTokens(text, restaurant) {
+  if (!text || !restaurant) return text || "";
+  const ownerName = restaurant.owner_email
+    ? restaurant.owner_email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "there";
+  const quickLoginLink = restaurant.admin_token
+    ? `https://forkitt.com/admin?token=${encodeURIComponent(restaurant.admin_token)}`
+    : "(no token)";
+  return text
+    .replace(/\[Restaurant Name\]/gi, restaurant.name || "")
+    .replace(/\[Owner Name\]/gi, ownerName)
+    .replace(/\[slug\]/gi, restaurant.slug || "")
+    .replace(/\[preview_password\]/gi, restaurant.preview_password || "(no password set)")
+    .replace(/\[admin_token\]/gi, restaurant.admin_token || "")
+    .replace(/\[quick_login_link\]/gi, quickLoginLink);
+}
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -50,6 +108,20 @@ export default function SuperAdminDashboard() {
   const [mediaUploading, setMediaUploading] = useState(false);
   const [deliverooScrapeLoading, setDeliverooScrapeLoading] = useState(false);
   const [deliverooScrapeMessage, setDeliverooScrapeMessage] = useState(null);
+  const [placesFillLoading, setPlacesFillLoading] = useState(false);
+  const [placesFillMessage, setPlacesFillMessage] = useState(null);
+  const [outreachRestaurantId, setOutreachRestaurantId] = useState(null);
+  const [outreachSubject, setOutreachSubject] = useState("");
+  const [outreachBody, setOutreachBody] = useState("");
+  const [outreachFrom, setOutreachFrom] = useState("hello@forkitt.com");
+  const [outreachSending, setOutreachSending] = useState(false);
+  const [outreachResult, setOutreachResult] = useState(null);
+  const [outreachMessages, setOutreachMessages] = useState([]);
+  const [outreachMessagesLoading, setOutreachMessagesLoading] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState([]);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -96,6 +168,35 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     if (view === "messages") loadMessages();
   }, [view, loadMessages]);
+
+  const loadOutreachMessages = useCallback(async (restaurant) => {
+    if (!restaurant?.owner_email) { setOutreachMessages([]); return; }
+    setOutreachMessagesLoading(true);
+    try {
+      const data = await getSuperadminMessages(token, { q: restaurant.owner_email, limit: 200 });
+      const ownerEmail = restaurant.owner_email.toLowerCase();
+      setOutreachMessages(
+        (data || [])
+          .filter((m) => m.channel === "email" && (
+            (m.from_addr || "").toLowerCase().includes(ownerEmail) ||
+            (m.to_addr || "").toLowerCase().includes(ownerEmail)
+          ))
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      );
+    } catch {
+      setOutreachMessages([]);
+    } finally {
+      setOutreachMessagesLoading(false);
+    }
+  }, [token]);
+
+  const outreachRestaurant = restaurants.find((r) => r.id === outreachRestaurantId) || null;
+
+  useEffect(() => {
+    if (view === "outreach" && outreachRestaurant) {
+      loadOutreachMessages(outreachRestaurant);
+    }
+  }, [view, outreachRestaurant, loadOutreachMessages]);
 
   const runDiscover = useCallback(async () => {
     setDiscoverLoading(true);
@@ -144,6 +245,82 @@ export default function SuperAdminDashboard() {
       cancelled = true;
     };
   }, [discoverResults, token, placePhotos]);
+
+  const handleLoadOutreachTemplate = () => {
+    setOutreachSubject(OUTREACH_SUBJECT);
+    setOutreachBody(OUTREACH_BODY);
+    setOutreachResult(null);
+  };
+
+  const handleSendOutreach = async () => {
+    if (!outreachRestaurant?.owner_email) return;
+    setOutreachSending(true);
+    setOutreachResult(null);
+    try {
+      const subject = fillTokens(outreachSubject, outreachRestaurant);
+      const body = fillTokens(outreachBody, outreachRestaurant);
+      await superadminReplyEmail(token, {
+        to_email: outreachRestaurant.owner_email,
+        subject,
+        body,
+        from_email: outreachFrom || null,
+      });
+      setOutreachResult({ ok: true, msg: "Email sent successfully!" });
+      loadOutreachMessages(outreachRestaurant);
+    } catch (e) {
+      setOutreachResult({ ok: false, msg: `Failed: ${e.message}` });
+    } finally {
+      setOutreachSending(false);
+    }
+  };
+
+  const loadEmailTemplatesData = useCallback(async () => {
+    try {
+      const data = await getEmailTemplates(token);
+      setEmailTemplates(data || []);
+    } catch { /* ignore */ }
+  }, [token]);
+
+  useEffect(() => {
+    if (view === "outreach") loadEmailTemplatesData();
+  }, [view, loadEmailTemplatesData]);
+
+  const handleSaveTemplate = async () => {
+    if (!saveTemplateName.trim()) return;
+    setTemplateSaving(true);
+    try {
+      await saveEmailTemplate(token, {
+        name: saveTemplateName.trim(),
+        subject: outreachSubject,
+        body: outreachBody,
+        from_email: outreachFrom || null,
+      });
+      setSaveTemplateName("");
+      setShowSaveTemplate(false);
+      loadEmailTemplatesData();
+    } catch (e) {
+      alert(`Failed to save template: ${e.message}`);
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id, name) => {
+    if (!confirm(`Delete template "${name}"?`)) return;
+    try {
+      await deleteEmailTemplate(token, id);
+      loadEmailTemplatesData();
+    } catch (e) {
+      alert(`Failed: ${e.message}`);
+    }
+  };
+
+  const handleLoadSavedTemplate = (tmpl) => {
+    setOutreachSubject(tmpl.subject || "");
+    setOutreachBody(tmpl.body || "");
+    if (tmpl.from_email) setOutreachFrom(tmpl.from_email);
+    setOutreachResult(null);
+  };
 
   const importPlace = async (placeId) => {
     try {
@@ -205,6 +382,7 @@ export default function SuperAdminDashboard() {
     setEditing(restaurant.id);
     setLogoFile(null);
     setBannerFile(null);
+    setPlacesFillMessage(null);
     setForm({
       name: restaurant.name,
       address: restaurant.address,
@@ -251,6 +429,32 @@ export default function SuperAdminDashboard() {
       setDeliverooScrapeMessage(`Failed: ${e.message}`);
     } finally {
       setDeliverooScrapeLoading(false);
+    }
+  };
+
+  const handleFillFromGoogle = async () => {
+    if (!editing || editing === "new") return;
+    setPlacesFillLoading(true);
+    setPlacesFillMessage(null);
+    try {
+      const result = await superPlacesFill(token, editing);
+      const parts = [];
+      if (result.banner_updated) parts.push("banner");
+      if (result.logo_updated) parts.push("logo");
+      if (result.gallery_added > 0) parts.push(`${result.gallery_added} gallery photo${result.gallery_added > 1 ? "s" : ""}`);
+      if (result.about_updated) parts.push("about text");
+      setPlacesFillMessage(
+        parts.length > 0
+          ? `Updated: ${parts.join(", ")} (matched "${result.place_name}")`
+          : `Matched "${result.place_name}" but no new content to update`
+      );
+      if (result.banner_url) setForm((prev) => ({ ...prev, banner_url: result.banner_url }));
+      if (result.logo_url) setForm((prev) => ({ ...prev, logo_url: result.logo_url }));
+      if (result.about_text) setForm((prev) => ({ ...prev, about_text: result.about_text }));
+    } catch (e) {
+      setPlacesFillMessage(`Failed: ${e.message}`);
+    } finally {
+      setPlacesFillLoading(false);
     }
   };
 
@@ -308,6 +512,12 @@ export default function SuperAdminDashboard() {
           onClick={() => setView("messages")}
         >
           Messages
+        </button>
+        <button
+          className={`btn btn-sm ${view === "outreach" ? "btn-primary" : "btn-outline"}`}
+          onClick={() => setView("outreach")}
+        >
+          Restaurant Messaging
         </button>
       </div>
 
@@ -620,6 +830,292 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
+      {/* Restaurant Messaging / Outreach view */}
+      {view === "outreach" && (
+        <div>
+          {/* Restaurant selector */}
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.8rem" }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Select Restaurant</label>
+                <select
+                  value={outreachRestaurantId ?? ""}
+                  onChange={(e) => {
+                    setOutreachRestaurantId(e.target.value ? parseInt(e.target.value, 10) : null);
+                    setOutreachResult(null);
+                  }}
+                >
+                  <option value="">— choose a restaurant —</option>
+                  {restaurants.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}{r.owner_email ? ` (${r.owner_email})` : " (no email)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {!outreachRestaurant && (
+            <p style={{ color: "var(--text-light)", textAlign: "center", padding: "2rem" }}>
+              Select a restaurant above to compose an outreach email.
+            </p>
+          )}
+
+          {outreachRestaurant && (
+            <>
+              {/* Restaurant info strip */}
+              <div className="card" style={{ marginBottom: "1rem", fontSize: "0.85rem", padding: "0.75rem 1rem" }}>
+                <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <strong style={{ fontSize: "1rem" }}>{outreachRestaurant.name}</strong>
+                  <span>Email: <strong>{outreachRestaurant.owner_email || "—"}</strong></span>
+                  <span>Slug: <strong>/{outreachRestaurant.slug}</strong></span>
+                  <span>Status: <strong>{outreachRestaurant.status || "live"}</strong></span>
+                  {outreachRestaurant.preview_password && (
+                    <span>Preview pass: <strong>{outreachRestaurant.preview_password}</strong></span>
+                  )}
+                </div>
+              </div>
+
+              {/* Saved templates */}
+              {emailTemplates.length > 0 && (
+                <div className="card" style={{ marginBottom: "1rem", padding: "0.75rem 1rem" }}>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text-light)", marginBottom: "0.5rem" }}>Saved Templates</div>
+                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                    {emailTemplates.map((t) => (
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.2rem" }}>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          style={{ fontSize: "0.78rem" }}
+                          onClick={() => handleLoadSavedTemplate(t)}
+                        >
+                          {t.name}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ fontSize: "0.7rem", padding: "2px 6px", background: "#fee2e2", color: "#991b1b", border: "none" }}
+                          onClick={() => handleDeleteTemplate(t.id, t.name)}
+                          title="Delete template"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Compose */}
+              <div className="card" style={{ marginBottom: "1.5rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                  <h4 style={{ margin: 0, fontWeight: 600 }}>Compose Email</h4>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={handleLoadOutreachTemplate}
+                  >
+                    Load Outreach Template
+                  </button>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>From</label>
+                    <input
+                      value={outreachFrom}
+                      onChange={(e) => setOutreachFrom(e.target.value)}
+                      placeholder="hello@forkitt.com"
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>To</label>
+                    <input
+                      value={outreachRestaurant.owner_email || ""}
+                      readOnly
+                      style={{ background: "var(--bg-soft, #f8f8f8)", color: "var(--text-light)" }}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginTop: "0.8rem" }}>
+                  <label>Subject</label>
+                  <input
+                    value={outreachSubject}
+                    onChange={(e) => setOutreachSubject(e.target.value)}
+                    placeholder="Email subject…"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Body</label>
+                  <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                    {["[Restaurant Name]", "[Owner Name]", "[slug]", "[preview_password]", "[admin_token]", "[quick_login_link]"].map((tok) => (
+                      <button
+                        key={tok}
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: "0.72rem", padding: "2px 8px" }}
+                        onClick={() => setOutreachBody((prev) => prev + tok)}
+                        title={`Insert ${tok} token`}
+                      >
+                        {tok}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    rows={20}
+                    value={outreachBody}
+                    onChange={(e) => setOutreachBody(e.target.value)}
+                    placeholder="Write your email here, or click 'Load Outreach Template' above…"
+                    style={{ fontFamily: "monospace", fontSize: "0.88rem" }}
+                  />
+                </div>
+
+                {/* Live preview */}
+                {(outreachSubject || outreachBody) && (
+                  <details style={{ marginBottom: "1rem" }}>
+                    <summary style={{ cursor: "pointer", fontSize: "0.85rem", color: "var(--text-light)", userSelect: "none" }}>
+                      Preview with tokens filled
+                    </summary>
+                    <div style={{
+                      marginTop: "0.6rem",
+                      padding: "1rem",
+                      background: "var(--bg-soft, #f8f8f8)",
+                      borderRadius: 8,
+                      fontSize: "0.85rem",
+                      border: "1px solid var(--border, #e5e7eb)",
+                    }}>
+                      {outreachSubject && (
+                        <div style={{ marginBottom: "0.75rem" }}>
+                          <strong>Subject:</strong> {fillTokens(outreachSubject, outreachRestaurant)}
+                        </div>
+                      )}
+                      <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                        {fillTokens(outreachBody, outreachRestaurant)}
+                      </div>
+                    </div>
+                  </details>
+                )}
+
+                <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleSendOutreach}
+                    disabled={outreachSending || !outreachRestaurant.owner_email || !outreachBody.trim()}
+                    title={!outreachRestaurant.owner_email ? "No owner email set for this restaurant" : ""}
+                  >
+                    {outreachSending ? "Sending…" : "Send Email"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    onClick={() => setShowSaveTemplate((s) => !s)}
+                    disabled={!outreachBody.trim()}
+                  >
+                    Save as Template
+                  </button>
+                  {!outreachRestaurant.owner_email && (
+                    <span style={{ fontSize: "0.85rem", color: "#dc2626" }}>
+                      No owner email set — edit the restaurant to add one.
+                    </span>
+                  )}
+                  {outreachResult && (
+                    <span style={{ fontSize: "0.85rem", color: outreachResult.ok ? "#16a34a" : "#dc2626" }}>
+                      {outreachResult.ok ? "✓" : "✗"} {outreachResult.msg}
+                    </span>
+                  )}
+                </div>
+                {showSaveTemplate && (
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", padding: "0.75rem", background: "var(--bg-soft, #f8f8f8)", borderRadius: 8 }}>
+                    <input
+                      value={saveTemplateName}
+                      onChange={(e) => setSaveTemplateName(e.target.value)}
+                      placeholder="Template name…"
+                      style={{ flex: 1, minWidth: 160 }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleSaveTemplate}
+                      disabled={templateSaving || !saveTemplateName.trim()}
+                    >
+                      {templateSaving ? "Saving…" : "Save"}
+                    </button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowSaveTemplate(false)}>Cancel</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Message thread */}
+              <div className="card">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                  <h4 style={{ margin: 0, fontWeight: 600 }}>Email History</h4>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={() => loadOutreachMessages(outreachRestaurant)}
+                    disabled={outreachMessagesLoading}
+                  >
+                    {outreachMessagesLoading ? "Loading…" : "Refresh"}
+                  </button>
+                </div>
+
+                {outreachMessagesLoading ? (
+                  <div className="loading">Loading messages…</div>
+                ) : outreachMessages.length === 0 ? (
+                  <p style={{ color: "var(--text-light)", textAlign: "center", padding: "1.5rem 0" }}>
+                    No emails yet with this restaurant.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+                    {outreachMessages.map((m) => {
+                      const sent = m.direction === "outbound";
+                      const fmtDate = (s) => {
+                        if (!s) return "-";
+                        try { return new Date(s).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }); }
+                        catch { return s; }
+                      };
+                      return (
+                        <div key={m.id} style={{
+                          padding: "0.85rem 1rem",
+                          background: sent ? "#f0fdf4" : "#eff6ff",
+                          borderRadius: 8,
+                          borderLeft: `3px solid ${sent ? "#16a34a" : "#2563eb"}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.3rem", gap: "0.5rem", flexWrap: "wrap" }}>
+                            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: sent ? "#16a34a" : "#2563eb" }}>
+                              {sent ? "SENT" : "RECEIVED"}
+                            </span>
+                            <span style={{ fontSize: "0.78rem", color: "var(--text-light)" }}>
+                              {fmtDate(m.created_at)}
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: 600, fontSize: "0.9rem", marginBottom: "0.3rem" }}>
+                            {m.subject || <em style={{ color: "var(--text-light)" }}>(no subject)</em>}
+                          </div>
+                          <div style={{
+                            fontSize: "0.84rem",
+                            color: "var(--ink)",
+                            whiteSpace: "pre-wrap",
+                            maxHeight: 140,
+                            overflow: "auto",
+                            lineHeight: 1.5,
+                          }}>
+                            {m.body_text || <em style={{ color: "var(--text-light)" }}>No body</em>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Discover view */}
       {view === "discover" && (
         <div>
@@ -715,9 +1211,32 @@ export default function SuperAdminDashboard() {
       {/* Add/Edit form */}
       {view === "restaurants" && editing !== null && (
         <div className="card" style={{ marginBottom: "2rem" }}>
-          <h3 style={{ fontWeight: 600, marginBottom: "1rem" }}>
-            {editing === "new" ? "Add Restaurant" : "Edit Restaurant"}
-          </h3>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+            <h3 style={{ fontWeight: 600, margin: 0 }}>
+              {editing === "new" ? "Add Restaurant" : "Edit Restaurant"}
+            </h3>
+            {editing !== "new" && (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleFillFromGoogle}
+                  disabled={placesFillLoading}
+                  title="Search Google Places for this restaurant and update banner, logo, gallery photos, and about text"
+                >
+                  {placesFillLoading ? "Searching Google..." : "Fill from Google Places"}
+                </button>
+                {placesFillMessage && (
+                  <span style={{
+                    fontSize: "0.85rem",
+                    color: placesFillMessage.startsWith("Failed") ? "#dc2626" : "#16a34a",
+                  }}>
+                    {placesFillMessage}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <form onSubmit={handleSave}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.8rem" }}>
               <div className="form-group">

@@ -449,6 +449,43 @@ def update_menu_item(item_id: int, item: MenuItemUpdate, authorization: str = He
     return MenuItem.from_row(row)
 
 
+@router.delete("/orders/{order_id}", status_code=204)
+def delete_order(order_id: int, authorization: str = Header(...)):
+    restaurant = _get_restaurant_from_token(authorization)
+    with get_db() as db:
+        row = db.execute(
+            "SELECT id FROM orders WHERE id = ? AND restaurant_id = ?",
+            (order_id, restaurant["id"]),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Order not found")
+        db.execute("DELETE FROM reviews WHERE order_id = ?", (order_id,))
+        db.execute("DELETE FROM order_items WHERE order_id = ?", (order_id,))
+        db.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+
+
+@router.delete("/customers", status_code=204)
+def delete_customer_signups(body: dict = Body(...), authorization: str = Header(...)):
+    """Remove a customer's marketing signup records by email and/or phone."""
+    restaurant = _get_restaurant_from_token(authorization)
+    rid = restaurant["id"]
+    email = (body.get("email") or "").strip().lower() or None
+    phone = (body.get("phone") or "").strip() or None
+    if not email and not phone:
+        raise HTTPException(status_code=422, detail="email or phone is required")
+    with get_db() as db:
+        if email:
+            db.execute(
+                "DELETE FROM marketing_signups WHERE restaurant_id = ? AND LOWER(TRIM(email)) = ?",
+                (rid, email),
+            )
+        if phone:
+            db.execute(
+                "DELETE FROM marketing_signups WHERE restaurant_id = ? AND TRIM(phone) = ?",
+                (rid, phone),
+            )
+
+
 @router.delete("/menu/{item_id}", status_code=204)
 def delete_menu_item(item_id: int, authorization: str = Header(...)):
     restaurant = _get_restaurant_from_token(authorization)

@@ -88,7 +88,7 @@ def get_details(place_id: str) -> dict:
     r = requests.get(
         f"{PLACES_BASE}/places/{place_id}",
         headers=_headers(
-            "id,displayName,formattedAddress,location,internationalPhoneNumber,nationalPhoneNumber,websiteUri,primaryType,primaryTypeDisplayName,googleMapsUri,photos"
+            "id,displayName,formattedAddress,location,internationalPhoneNumber,nationalPhoneNumber,websiteUri,primaryType,primaryTypeDisplayName,googleMapsUri,photos,editorialSummary"
         ),
         timeout=20,
     )
@@ -98,6 +98,7 @@ def get_details(place_id: str) -> dict:
     dn = p.get("displayName") or {}
     photos = p.get("photos") or []
     photo_names = [ph.get("name") for ph in photos if ph.get("name")]
+    editorial = (p.get("editorialSummary") or {}).get("text") or None
     return {
         "place_id": p.get("id") or place_id,
         "name": dn.get("text") or None,
@@ -111,6 +112,7 @@ def get_details(place_id: str) -> dict:
         "primary_type_label": (p.get("primaryTypeDisplayName") or {}).get("text"),
         "photo_name": photo_names[0] if photo_names else None,
         "photo_names": photo_names,
+        "editorial_summary": editorial,
     }
 
 

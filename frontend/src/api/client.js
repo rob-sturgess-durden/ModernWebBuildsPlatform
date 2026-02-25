@@ -222,6 +222,21 @@ export function deleteMenuItem(token, itemId) {
   });
 }
 
+export function deleteOrder(token, orderId) {
+  return request(`/admin/orders/${orderId}`, {
+    method: "DELETE",
+    headers: adminHeaders(token),
+  });
+}
+
+export function deleteCustomerSignup(token, { email, phone }) {
+  return request("/admin/customers", {
+    method: "DELETE",
+    body: JSON.stringify({ email, phone }),
+    headers: adminHeaders(token),
+  });
+}
+
 export function getAdminCategories(token) {
   return request("/admin/categories", { headers: adminHeaders(token) });
 }
@@ -342,10 +357,37 @@ export function getSuperadminMessages(token, options = {}) {
   return request(`/superadmin/messages${suffix}`, { headers: superHeaders(token) });
 }
 
-export function superadminReplyEmail(token, { to_email, subject, body }) {
+export function superadminReplyEmail(token, { to_email, subject, body, from_email = null }) {
   return request("/superadmin/messages/reply", {
     method: "POST",
-    body: JSON.stringify({ to_email, subject, body }),
+    body: JSON.stringify({ to_email, subject, body, from_email }),
+    headers: superHeaders(token),
+  });
+}
+
+export function getEmailTemplates(token) {
+  return request("/superadmin/email-templates", { headers: superHeaders(token) });
+}
+
+export function saveEmailTemplate(token, { name, subject, body, from_email = null }) {
+  return request("/superadmin/email-templates", {
+    method: "POST",
+    body: JSON.stringify({ name, subject, body, from_email }),
+    headers: superHeaders(token),
+  });
+}
+
+export function updateEmailTemplate(token, id, { name, subject, body, from_email = null }) {
+  return request(`/superadmin/email-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, subject, body, from_email }),
+    headers: superHeaders(token),
+  });
+}
+
+export function deleteEmailTemplate(token, id) {
+  return request(`/superadmin/email-templates/${id}`, {
+    method: "DELETE",
     headers: superHeaders(token),
   });
 }
@@ -374,6 +416,14 @@ export function superPlacesPhoto(token, photoName, max = 800) {
   params.set("name", photoName || "");
   params.set("max", String(max));
   return request(`/superadmin/places/photo?${params.toString()}`, { headers: superHeaders(token) });
+}
+
+export function superPlacesFill(token, restaurantId) {
+  return request(`/superadmin/places/fill/${restaurantId}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+    headers: superHeaders(token),
+  });
 }
 
 // Uploads (admin or superadmin token)

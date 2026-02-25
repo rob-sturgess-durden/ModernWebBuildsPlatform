@@ -397,15 +397,16 @@ def send_whatsapp_optin_request(to_number: str) -> bool:
     return send_whatsapp_template(to_number, config.TWILIO_OPTIN_CONTENT_SID, {})
 
 
-def send_email(to_email: str, subject: str, body: str, restaurant_id: int | None = None) -> bool:
+def send_email(to_email: str, subject: str, body: str, restaurant_id: int | None = None, from_email: str | None = None) -> bool:
     """Send an email via SendGrid API (preferred) or SMTP fallback."""
+    effective_from = (from_email or "").strip() or config.SENDGRID_FROM
     if config.SENDGRID_API_KEY:
         try:
             from sendgrid import SendGridAPIClient
             from sendgrid.helpers.mail import Mail
 
             message = Mail(
-                from_email=config.SENDGRID_FROM,
+                from_email=effective_from,
                 to_emails=to_email,
                 subject=subject,
                 html_content=body.replace("\n", "<br/>"),
@@ -435,7 +436,7 @@ def send_email(to_email: str, subject: str, body: str, restaurant_id: int | None
         msg = EmailMessage()
         msg.set_content(body)
         msg["Subject"] = subject
-        msg["From"] = config.SMTP_FROM
+        msg["From"] = effective_from or config.SMTP_FROM
         msg["To"] = to_email
         with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT) as server:
             server.starttls()

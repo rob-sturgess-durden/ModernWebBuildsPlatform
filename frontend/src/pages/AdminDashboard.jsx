@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import {
   getAdminOrders,
   updateOrderStatus,
+  deleteOrder,
+  deleteCustomerSignup,
   getAdminMenu,
   addMenuItem,
   updateMenuItem,
@@ -302,6 +304,26 @@ export default function AdminDashboard() {
     try {
       await updateOrderStatus(token, orderId, newStatus);
       loadOrders();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId, orderNumber) => {
+    if (!confirm(`Delete order ${orderNumber}? This cannot be undone.`)) return;
+    try {
+      await deleteOrder(token, orderId);
+      loadOrders();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteCustomer = async (customer) => {
+    if (!confirm(`Remove ${customer.customer_name}'s marketing signup? Their order history will remain.`)) return;
+    try {
+      await deleteCustomerSignup(token, { email: customer.customer_email, phone: customer.customer_phone });
+      loadCustomers();
     } catch (e) {
       alert(e.message);
     }
@@ -724,7 +746,7 @@ export default function AdminDashboard() {
           ) : (
             <div className="grid grid-2">
               {orders.map((order) => (
-                <OrderCard key={order.id} order={order} onStatusChange={handleStatusChange} />
+                <OrderCard key={order.id} order={order} onStatusChange={handleStatusChange} onDelete={handleDeleteOrder} />
               ))}
             </div>
           )}
@@ -1082,7 +1104,7 @@ export default function AdminDashboard() {
 
       {/* Customers tab */}
       {tab === "customers" && (
-        <CustomerPanel customers={customers} loading={loading} token={localStorage.getItem("admin_token")} restaurantName={restaurantInfo?.name || ""} />
+        <CustomerPanel customers={customers} loading={loading} token={localStorage.getItem("admin_token")} restaurantName={restaurantInfo?.name || ""} onDeleteSignup={handleDeleteCustomer} />
       )}
 
       {/* Menu tab */}
@@ -1249,7 +1271,7 @@ export default function AdminDashboard() {
   );
 }
 
-function OrderCard({ order, onStatusChange }) {
+function OrderCard({ order, onStatusChange, onDelete }) {
   const pickupTime = order.pickup_time
     ? new Date(order.pickup_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
     : "";
@@ -1317,39 +1339,47 @@ function OrderCard({ order, onStatusChange }) {
         </p>
       )}
 
-      {actions[order.status] && (
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          {actions[order.status].map((a) => (
-            <button
-              key={a.status}
-              className="btn btn-sm"
-              style={{
-                background: a.bg,
-                color: a.color,
-                border: "none",
-                fontWeight: 600,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.4rem",
-                padding: "0.5rem 1rem",
-                borderRadius: 8,
-                flex: 1,
-                justifyContent: "center",
-              }}
-              onClick={() => onStatusChange(order.id, a.status)}
-            >
-              <i className={a.icon} style={{ fontSize: "0.8rem" }} />
-              {a.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        {actions[order.status] && actions[order.status].map((a) => (
+          <button
+            key={a.status}
+            className="btn btn-sm"
+            style={{
+              background: a.bg,
+              color: a.color,
+              border: "none",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              padding: "0.5rem 1rem",
+              borderRadius: 8,
+              flex: 1,
+              justifyContent: "center",
+            }}
+            onClick={() => onStatusChange(order.id, a.status)}
+          >
+            <i className={a.icon} style={{ fontSize: "0.8rem" }} />
+            {a.label}
+          </button>
+        ))}
+        {onDelete && (
+          <button
+            className="btn btn-sm"
+            style={{ background: "#fee2e2", color: "#991b1b", border: "none", padding: "0.5rem 0.7rem", borderRadius: 8, flexShrink: 0 }}
+            onClick={() => onDelete(order.id, order.order_number)}
+            title="Delete order"
+          >
+            <i className="fas fa-trash" style={{ fontSize: "0.8rem" }} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 
-function CustomerPanel({ customers, loading, token, restaurantName }) {
+function CustomerPanel({ customers, loading, token, restaurantName, onDeleteSignup }) {
   const [selected, setSelected] = useState(new Set());
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -1510,6 +1540,7 @@ function CustomerPanel({ customers, loading, token, restaurantName }) {
               <th style={{ textAlign: "center" }}>Channels</th>
               <th>Orders</th>
               <th>Last order</th>
+              {onDeleteSignup && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -1550,6 +1581,20 @@ function CustomerPanel({ customers, loading, token, restaurantName }) {
                   <td style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
                     {new Date(c.last_order_at).toLocaleDateString("en-GB")}
                   </td>
+                  {onDeleteSignup && (
+                    <td style={{ textAlign: "center" }}>
+                      {c.marketing_optin && (
+                        <button
+                          className="btn btn-sm"
+                          style={{ background: "#fee2e2", color: "#991b1b", border: "none", padding: "2px 8px", borderRadius: 6, fontSize: "0.75rem" }}
+                          onClick={() => onDeleteSignup(c)}
+                          title="Remove marketing signup"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
